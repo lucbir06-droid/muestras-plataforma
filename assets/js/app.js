@@ -1,4 +1,5 @@
 import { Store } from "./store.js";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js";
 
 /* =========================================================
    Millán Academy — panel interno
@@ -12,6 +13,7 @@ const sidenav = document.getElementById("sidenav");
 
 const NAV = [
   { path: "/", label: "Panel", icon: "i-dashboard" },
+  { path: "/checkin", label: "Check-in", icon: "i-camera", countKey: "checkinsError" },
   { path: "/alumnos", label: "Alumnos", icon: "i-users" },
   { path: "/agenda", label: "Agenda", icon: "i-calendar" },
   { path: "/clases-prueba", label: "Clases de prueba", icon: "i-play", countKey: "solicitudesPendientes" },
@@ -98,6 +100,9 @@ function render() {
   if (path === "/") {
     title = "Panel";
     html = Dashboard();
+  } else if (path === "/checkin") {
+    title = "Check-in";
+    html = Checkin();
   } else if (path === "/alumnos") {
     title = "Alumnos";
     html = AlumnosList();
@@ -132,6 +137,7 @@ function renderNav(path) {
   const counts = {
     solicitudesPendientes: Store.solicitudes().filter((s) => s.estado === "pendiente").length,
     pagosPendientes: Store.pagos().filter((p) => p.estado === "pendiente").length,
+    checkinsError: Store.checkins().filter((c) => c.estado === "error").length,
   };
   sidenav.innerHTML = NAV.map((item) => {
     const on = path === item.path || (item.path === "/alumnos" && path.startsWith("/alumnos/"));
@@ -231,6 +237,131 @@ function alumnoCard(a) {
           <div class="track"><div class="fill" style="width:${top.avance}%"></div></div>
         </div>` : ""}
     </a>`;
+}
+
+function Checkin() {
+  const checkins = Store.checkins();
+  return `
+    <div class="block">
+      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
+        Cuando un profe llega a la cancha, se saca una foto acá mismo desde el celular.
+        Queda guardada en el panel y le llega un email a Millán al instante.
+      </p>
+      <form class="card" data-action="checkin" style="max-width:460px;">
+        <div class="field"><label>Nombre del profe</label><input name="nombre" required placeholder="Nombre y apellido" /></div>
+        <div class="field"><label>Sede</label>
+          <select name="sede">${Store.SEDES.map((s) => `<option>${s}</option>`).join("")}</select>
+        </div>
+        <div class="field">
+          <label>Foto de llegada</label>
+          <input name="foto" type="file" accept="image/*" capture="environment" required />
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">${icon("i-camera")} Enviar check-in</button>
+      </form>
+      ${!WEB3FORMS_ACCESS_KEY ? `
+        <div class="mp-note" style="max-width:460px;margin-top:14px;">
+          <b>Todavía no está conectado el email de Millán.</b> El check-in ya queda
+          guardado acá abajo, pero para que también llegue por email hace falta una
+          Access Key gratis de <b>web3forms.com</b> pegada en <code>assets/js/config.js</code>.
+        </div>` : ""}
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Check-ins recientes</h3></div>
+      <div class="list">
+        ${checkins.length ? checkins.map(checkinRow).join("") : `<div class="empty">Todavía no hay check-ins.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function checkinRow(c) {
+  const map = {
+    enviando: ["Enviando…", "warn"],
+    enviado: ["Millán notificado", "ok"],
+    guardado: ["Guardado sin email", "muted"],
+    error: ["No se pudo enviar", "crit"],
+  };
+  const [label, kind] = map[c.estado] || ["", "muted"];
+  const iniciales = c.nombre.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  const hora = new Date(c.fecha).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return `
+    <div class="row-card">
+      ${c.foto
+        ? `<img src="${c.foto}" alt="" style="width:44px;height:44px;border-radius:9px;object-fit:cover;flex:none;border:1px solid var(--line);" />`
+        : `<div class="avatar-sm">${esc(iniciales)}</div>`}
+      <div class="grow">
+        <div class="row-title">${esc(c.nombre)} <span style="color:var(--muted);font-weight:500;">· ${esc(c.sede)}</span></div>
+        <div class="row-sub">${fmtDate(c.fecha)}, ${hora}</div>
+      </div>
+      ${badge(label, kind)}
+    </div>`;
+}
+
+/* -------- fotos: reducir tamaño antes de guardar / mandar -------- */
+function resizeImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > height && width > maxDim) { height = Math.round((height * maxDim) / width); width = maxDim; }
+      else if (height > maxDim) { width = Math.round((width * maxDim) / height); height = maxDim; }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("no-blob"))), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("no-image")); };
+    img.src = url;
+  });
+}
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function handleCheckin(form) {
+  const nombre = form.elements.nombre.value.trim();
+  const sede = form.elements.sede.value;
+  const file = form.elements.foto.files[0];
+  if (!nombre || !file) return;
+
+  const submitBtn = form.querySelector("button[type=submit]");
+  submitBtn.disabled = true;
+
+  let thumb = null;
+  try { thumb = await blobToDataURL(await resizeImage(file, 220, 0.6)); } catch (e) { /* sin preview, no pasa nada */ }
+
+  const record = Store.addCheckin({ nombre, sede, foto: thumb, estado: WEB3FORMS_ACCESS_KEY ? "enviando" : "guardado" });
+  render();
+  toast("Check-in guardado");
+
+  if (!WEB3FORMS_ACCESS_KEY) return;
+
+  try {
+    const uploadBlob = await resizeImage(file, 1400, 0.82);
+    const fd = new FormData();
+    fd.append("access_key", WEB3FORMS_ACCESS_KEY);
+    fd.append("subject", `Check-in — ${nombre} en ${sede}`);
+    fd.append("from_name", "Millán Academy · Panel");
+    fd.append("message", `${nombre} llegó a la sede ${sede} y subió su foto de check-in.\n\nFecha: ${new Date(record.fecha).toLocaleString("es-MX")}`);
+    fd.append("attachment", uploadBlob, "checkin.jpg");
+    const res = await fetch("https://api.web3forms.com/submit", { method: "POST", body: fd });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || "error");
+    Store.updateCheckin(record.id, { estado: "enviado" });
+    toast(`Millán fue notificado por email`);
+  } catch (err) {
+    Store.updateCheckin(record.id, { estado: "error" });
+    toast("No se pudo notificar por email — el check-in quedó guardado igual");
+  }
+  render();
 }
 
 function AlumnosList() {
@@ -583,6 +714,10 @@ view.addEventListener("submit", (e) => {
   if (!form) return;
   e.preventDefault();
   const action = form.dataset.action;
+  if (action === "checkin") {
+    handleCheckin(form);
+    return;
+  }
   const data = Object.fromEntries(new FormData(form).entries());
 
   if (action === "add-alumno") {

@@ -122,13 +122,27 @@ function seed() {
       { id: uid("pg"), alumnoId: "al_4", concepto: "Clase de prueba", metodo: "PayPal", monto: 25, moneda: "USD", fecha: past(3), estado: "pagado" },
       { id: uid("pg"), alumnoId: "al_1", concepto: "Plan mensual · 8 sesiones", metodo: "Mercado Pago", monto: 4800, moneda: "MXN", fecha: days(0), estado: "pendiente" },
     ],
+
+    checkins: [
+      { id: uid("chk"), nombre: "Eduardo Millán", sede: "Metepec", fecha: past(1), foto: null, estado: "enviado" },
+      { id: uid("chk"), nombre: "Daniel Millán", sede: "CDMX", fecha: past(2), foto: null, estado: "enviado" },
+    ],
   };
 }
 
 function load() {
   try {
     const raw = localStorage.getItem(DB_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const data = JSON.parse(raw);
+      // migración: si esta sesión guardó datos antes de que existiera alguna
+      // colección nueva (por ej. checkins), la completamos sin pisar lo demás.
+      const fresh = seed();
+      for (const key of Object.keys(fresh)) {
+        if (!(key in data)) data[key] = fresh[key];
+      }
+      return data;
+    }
   } catch (e) { /* localStorage no disponible: seguimos con datos de ejemplo en memoria */ }
   const data = seed();
   save(data);
@@ -219,5 +233,21 @@ export const Store = {
     state.pagos.unshift(p);
     save(state);
     return p;
+  },
+
+  // ---- check-ins (llegada a cancha con foto) ----
+  checkins() {
+    return state.checkins.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  },
+  addCheckin(entry) {
+    const c = { id: uid("chk"), fecha: new Date().toISOString(), estado: "enviando", foto: null, ...entry };
+    state.checkins.unshift(c);
+    save(state);
+    return c;
+  },
+  updateCheckin(id, patch) {
+    const c = state.checkins.find((x) => x.id === id);
+    if (c) { Object.assign(c, patch); save(state); }
+    return c;
   },
 };
