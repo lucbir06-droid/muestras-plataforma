@@ -1,0 +1,169 @@
+/* =========================================================
+   Millán Academy — design tokens & shared components
+   Marca: negro + verde, tipografía técnica en bloques.
+   Sitio y app comparten esta hoja.
+   ========================================================= */
+
+:root{
+  /* superficies */
+  --bg:        #0B0C0C;
+  --surface:   #141614;
+  --surface-2: #1B1E1B;
+  --surface-3: #232622;
+  --line:      rgba(255,255,255,.09);
+  --line-soft: rgba(255,255,255,.05);
+
+  /* texto */
+  --ink:        #F7F8F6;
+  --ink-soft:   #C7CCC6;
+  --muted:      #8B948A;
+
+  /* marca */
+  --accent:       #7CC26B;
+  --accent-2:     #A7DB98;
+  --accent-dim:   #52794A;
+  --accent-soft:  rgba(124,194,107,.14);
+  --accent-line:  rgba(124,194,107,.35);
+  --on-accent:    #0C130E;
+
+  /* semántico — distinto del verde de marca */
+  --ok:       #4FB0C4;
+  --ok-soft:  rgba(79,176,196,.16);
+  --warn:     #E0AA3E;
+  --warn-soft:rgba(224,170,62,.16);
+  --crit:     #E0673F;
+  --crit-soft:rgba(224,103,63,.16);
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 22px;
+  --maxw: 1180px;
+
+  --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;}
+html{background:var(--bg);}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink-soft);
+  font-family:var(--body);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+img{max-width:100%;display:block;}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;}
+
+h1,h2,h3,h4{
+  font-family:var(--display);
+  color:var(--ink);
+  font-weight:600;
+  line-height:1.1;
+  letter-spacing:.01em;
+  text-transform:uppercase;
+  margin:0;
+  text-wrap:balance;
+}
+p{margin:0;}
+
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+
+/* -------- eyebrow / pill -------- */
+.pill{
+  display:inline-flex;align-items:center;gap:9px;
+  background:var(--accent);color:var(--on-accent);
+  font-family:var(--display);font-weight:600;font-size:.76rem;
+  letter-spacing:.06em;text-transform:uppercase;
+  padding:9px 18px 9px 14px;border-radius:999px;
+  white-space:nowrap;
+}
+.pill::before{
+  content:"";width:7px;height:7px;border-radius:50%;
+  background:var(--on-accent);flex:none;
+}
+.pill.outline{
+  background:transparent;color:var(--accent-2);
+  border:1px solid var(--accent-line);
+}
+.pill.outline::before{background:var(--accent-2);}
+
+/* -------- buttons -------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font-family:var(--display);font-weight:600;font-size:.85rem;
+  letter-spacing:.03em;text-transform:uppercase;
+  padding:13px 22px;border-radius:10px;border:0;cursor:pointer;
+  transition:transform .12s ease, background .15s ease, border-color .15s ease;
+}
+.btn:active{transform:translateY(1px);}
+.btn-primary{background:var(--accent);color:var(--on-accent);}
+.btn-primary:hover{background:var(--accent-2);}
+.btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+.btn-ghost:hover{border-color:var(--accent-line);color:var(--accent-2);}
+.btn-sm{padding:9px 14px;font-size:.72rem;border-radius:8px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.btn:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+
+/* -------- cards -------- */
+.card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:20px;
+}
+
+/* -------- badges / status -------- */
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--display);font-weight:600;font-size:.66rem;
+  letter-spacing:.05em;text-transform:uppercase;
+  padding:4px 10px;border-radius:999px;
+}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}
+.badge-ok{background:var(--ok-soft);color:var(--ok);}
+.badge-warn{background:var(--warn-soft);color:var(--warn);}
+.badge-crit{background:var(--crit-soft);color:var(--crit);}
+.badge-muted{background:var(--surface-3);color:var(--muted);}
+
+/* -------- forms -------- */
+label{
+  display:block;font-family:var(--display);font-size:.68rem;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:7px;
+}
+input,textarea,select{
+  width:100%;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:9px;color:var(--ink);font-family:var(--body);font-size:.92rem;
+  padding:11px 12px;
+}
+textarea{resize:vertical;min-height:84px;}
+input::placeholder,textarea::placeholder{color:var(--muted);}
+.field{margin-bottom:16px;}
+.field-row{display:grid;gap:14px;grid-template-columns:1fr 1fr;}
+@media (max-width:640px){.field-row{grid-template-columns:1fr;}}
+
+/* -------- utility text -------- */
+.eyebrow{
+  font-family:var(--display);font-size:.72rem;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);
+}
+.tabular{font-variant-numeric:tabular-nums;}
+
+/* -------- decorative wave mesh (evoca el fondo del PDF) -------- */
+.mesh{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;}
+.mesh svg{position:absolute;opacity:.55;}
+
+/* -------- scrollbar for wide tables -------- */
+.scrollx{overflow-x:auto;}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important;}
+}

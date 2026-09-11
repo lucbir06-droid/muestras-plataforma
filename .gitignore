@@ -1,0 +1,5 @@
+# Material de marca sin procesar (pesa mucho y no lo usa la app en vivo;
+# lo que hace falta ya se extrajo a assets/img y al copy del sitio).
+*.pdf
+.DS_Store
+Thumbs.db
