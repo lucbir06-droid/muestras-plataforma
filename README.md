@@ -87,16 +87,26 @@ existan).
 
 ### 2. Crear las cuentas del staff (Millán + cada profe)
 
-Todavía no hay pantalla de "crear cuenta" dentro de la app — a propósito,
-para que no se pueda registrar cualquiera. Se crean así:
+Ahora se pueden crear solos desde la propia pantalla de login del panel
+(`app/`) → **"¿No tenés cuenta? Creá una"** → nombre, correo, teléfono,
+país y contraseña.
 
-1. En Supabase → **Authentication → Users → Add user**.
-2. Poner el email y una contraseña.
-3. Activar **"Auto Confirm User"** (si no, le manda un correo de
-   verificación que no necesitamos por ahora).
-4. Repetir por cada persona que necesite entrar al panel.
+Para que puedan entrar de una, sin tener que confirmar el correo:
 
-Con eso ya pueden iniciar sesión en `app/` con ese email y contraseña.
+1. En Supabase → **Authentication → Sign In / Providers → Email**.
+2. Apagar **"Confirm email"**.
+3. Guardar.
+
+Si se deja prendido (es lo que trae por default), después de crear la
+cuenta le va a pedir confirmar el correo antes de poder iniciar sesión.
+
+⚠️ **Importante:** hoy cualquiera que se registre entra con acceso
+completo al panel — incluida la sección "Dueños" (finanzas) y el botón
+de eliminar alumnos. Todavía no hay una pantalla que distinga "dueño" de
+"profe" (aunque la tabla `perfiles` ya guarda un campo `rol` para cuando
+se arme esa parte). Mientras tanto, tratá el link de registro como algo
+que solo comparten con gente de confianza del equipo, no como un botón
+público del sitio.
 
 ### Qué quedó conectado a Supabase (comparte datos entre celulares) vs. qué sigue local
 

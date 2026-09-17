@@ -169,38 +169,99 @@ function renderNav(path) {
   }).join("");
 }
 
-/* ---------------- login / sesión ---------------- */
+/* ---------------- login / registro / sesión ---------------- */
 let session = null;
 
-function LoginView(errorMsg) {
-  return `
-    <div style="max-width:380px;margin:64px auto 0;">
-      <div class="card">
-        <h2 style="margin-bottom:4px;">Iniciar sesión</h2>
-        <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Panel interno · Millán Academy</p>
-        ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
-        <form id="loginForm">
-          <div class="field"><label>Email</label><input name="email" type="email" required autocomplete="username" /></div>
-          <div class="field"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password" /></div>
-          <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Entrar</button>
-        </form>
-      </div>
-    </div>`;
+function AuthShell(inner) {
+  return `<div style="display:flex;align-items:center;justify-content:center;min-height:72vh;padding:20px 16px;">
+    <div style="max-width:380px;width:100%;">${inner}</div>
+  </div>`;
 }
 
-function wireLogin() {
-  const form = document.getElementById("loginForm");
+function LoginView(errorMsg, infoMsg) {
+  return AuthShell(`
+    <div class="card">
+      <h2 style="margin-bottom:4px;">Iniciar sesión</h2>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Panel interno · Millán Academy</p>
+      ${infoMsg ? `<div class="mp-note" style="margin-bottom:16px;">${esc(infoMsg)}</div>` : ""}
+      ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
+      <form id="authForm">
+        <div class="field"><label>Email</label><input name="email" type="email" required autocomplete="username" /></div>
+        <div class="field"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password" /></div>
+        <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Entrar</button>
+      </form>
+      <p style="font-size:.8rem;color:var(--muted);margin-top:16px;text-align:center;">
+        ¿No tenés cuenta? <a href="#" id="toSignup" style="color:var(--accent-2);">Creá una</a>
+      </p>
+    </div>`);
+}
+
+function SignupView(errorMsg) {
+  return AuthShell(`
+    <div class="card">
+      <h2 style="margin-bottom:4px;">Crear cuenta</h2>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Panel interno · Millán Academy</p>
+      ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
+      <form id="authForm">
+        <div class="field"><label>Nombre completo</label><input name="nombre" required /></div>
+        <div class="field"><label>Correo</label><input name="email" type="email" required autocomplete="username" /></div>
+        <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
+        <div class="field"><label>País</label><input name="pais" required placeholder="México" /></div>
+        <div class="field"><label>Contraseña</label><input name="password" type="password" required minlength="6" autocomplete="new-password" /></div>
+        <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Crear cuenta</button>
+      </form>
+      <p style="font-size:.8rem;color:var(--muted);margin-top:16px;text-align:center;">
+        ¿Ya tenés cuenta? <a href="#" id="toLogin" style="color:var(--accent-2);">Iniciá sesión</a>
+      </p>
+    </div>`);
+}
+
+function showLogin(errorMsg, infoMsg) {
+  pageTitle.textContent = "Iniciar sesión";
+  view.innerHTML = LoginView(errorMsg, infoMsg);
+  wireAuthForms();
+}
+function showSignup(errorMsg) {
+  pageTitle.textContent = "Crear cuenta";
+  view.innerHTML = SignupView(errorMsg);
+  wireAuthForms();
+}
+
+function wireAuthForms() {
+  const toSignup = document.getElementById("toSignup");
+  if (toSignup) toSignup.addEventListener("click", (e) => { e.preventDefault(); showSignup(); });
+  const toLogin = document.getElementById("toLogin");
+  if (toLogin) toLogin.addEventListener("click", (e) => { e.preventDefault(); showLogin(); });
+
+  const form = document.getElementById("authForm");
   if (!form) return;
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = form.querySelector("button");
     btn.disabled = true;
-    const { error } = await sb.auth.signInWithPassword({ email: form.email.value.trim(), password: form.password.value });
-    if (error) {
-      view.innerHTML = LoginView(error.message.includes("Invalid") ? "Email o contraseña incorrectos." : error.message);
-      wireLogin();
+    const email = form.email.value.trim();
+    const password = form.password.value;
+
+    if (form.elements.nombre) {
+      // ---- crear cuenta ----
+      const { data, error } = await sb.auth.signUp({
+        email, password,
+        options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim() } },
+      });
+      if (error) {
+        showSignup(error.message.includes("already registered") ? "Ese correo ya tiene una cuenta — iniciá sesión." : error.message);
+        return;
+      }
+      if (!data.session) {
+        showLogin(null, "Cuenta creada. Si te pedimos confirmar el correo, revisá tu bandeja de entrada y después iniciá sesión acá.");
+      }
+      // si ya vino con sesión activa, onAuthStateChange dispara route() solo
+    } else {
+      // ---- iniciar sesión ----
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) showLogin(error.message.includes("Invalid") ? "Email o contraseña incorrectos." : error.message);
+      // si funcionó, onAuthStateChange dispara route() solo
     }
-    // si funcionó, onAuthStateChange llama a route() solo
   });
 }
 
@@ -213,9 +274,7 @@ async function route() {
   if (!session && !esPublica) {
     side.style.display = "none";
     resetBtn.style.display = "none";
-    pageTitle.textContent = "Iniciar sesión";
-    view.innerHTML = LoginView();
-    wireLogin();
+    showLogin();
     return;
   }
   side.style.display = session ? "" : "none";

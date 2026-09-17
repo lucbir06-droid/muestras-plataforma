@@ -5,14 +5,47 @@
 -- Se puede correr una sola vez; si algo ya existe, no rompe nada.
 -- ================================================================
 
--- Perfiles de staff. Se llena un registro por cada persona que se
--- crea en Authentication → Users (ver instrucciones en el README).
+-- Perfiles de staff. Se llena solo (ver el trigger más abajo) cada vez
+-- que alguien crea una cuenta desde la pantalla de "Crear cuenta" del
+-- panel, o cada vez que se crea un usuario a mano desde Authentication →
+-- Users.
 create table if not exists public.perfiles (
   id uuid primary key references auth.users(id) on delete cascade,
   nombre text not null,
+  telefono text,
+  pais text,
   rol text not null default 'profe' check (rol in ('dueño','profe')),
   creado_en timestamptz not null default now()
 );
+alter table public.perfiles add column if not exists telefono text;
+alter table public.perfiles add column if not exists pais text;
+
+-- Crea automáticamente la fila de perfil apenas se registra alguien
+-- (toma nombre/teléfono/país de los datos que mandó el formulario de
+-- registro; si se creó a mano desde el dashboard, usa el email).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.perfiles (id, nombre, telefono, pais, rol)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'nombre', split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'telefono',
+    new.raw_user_meta_data->>'pais',
+    'profe'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
 
 -- Alumnos
 create table if not exists public.alumnos (
