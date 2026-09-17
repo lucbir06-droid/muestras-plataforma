@@ -3,9 +3,10 @@ import { WEB3FORMS_ACCESS_KEY } from "./config.js";
 import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js";
 import { sb } from "./supabase-client.js";
 
-// rutas que se pueden ver SIN haber iniciado sesión (las llena gente
-// de afuera: una familia interesada, no hace falta que tenga cuenta)
-const RUTAS_PUBLICAS = ["/clases-prueba", "/inscribirse"];
+// Todo el panel pide haber iniciado sesión — incluidas reservar una
+// clase de prueba e inscribirse/pagar. Si en algún momento se quiere
+// dejar alguna pantalla sin login, se agrega su ruta acá.
+const RUTAS_PUBLICAS = [];
 
 /* =========================================================
    Millán Academy — panel interno
@@ -531,7 +532,7 @@ function AlumnosList() {
             </div>
           </div>
           <div class="field-row">
-            <div class="field"><label>Sede</label>
+            <div class="field"><label>Sede de entrenamiento</label>
               <select name="sede">${Store.SEDES.map((s) => `<option>${s}</option>`).join("")}</select>
             </div>
             <div class="field"><label>Coach</label>
@@ -541,6 +542,9 @@ function AlumnosList() {
           <div class="field-row">
             <div class="field"><label>Teléfono (alumno o papá/mamá)</label><input name="telefono" placeholder="+52 55 0000 0000" /></div>
             <div class="field"><label>Correo (alumno o papá/mamá)</label><input name="correo" type="email" placeholder="correo@ejemplo.com" /></div>
+          </div>
+          <div class="field"><label>Moneda en la que paga</label>
+            <select name="moneda"><option value="MXN">MXN — paga desde México</option><option value="USD">USD — alumno internacional (Stripe/PayPal)</option></select>
           </div>
           <div class="field"><label>Talla de playera</label>
             <select name="tallaPlayera">${Store.TALLAS.map((t) => `<option>${t}</option>`).join("")}</select>
@@ -1156,7 +1160,7 @@ view.addEventListener("submit", async (e) => {
   const data = Object.fromEntries(new FormData(form).entries());
 
   if (action === "add-alumno") {
-    const moneda = ["Miami", "LA", "Nueva York"].includes(data.sede) ? "USD" : (data.sede === "París" ? "EUR" : "MXN");
+    const moneda = data.moneda;
     const a = Store.addAlumno({
       nombre: data.nombre.trim(), categoria: data.categoria, sede: data.sede, coach: data.coach, moneda,
       telefono: data.telefono?.trim() || "", correo: data.correo?.trim() || "", tallaPlayera: data.tallaPlayera,

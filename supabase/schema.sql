@@ -86,8 +86,8 @@ create table if not exists public.reservas (
   estado text not null default 'disponible'
 );
 
--- Solicitudes de clase de prueba — el ÚNICO formulario que puede
--- enviar alguien sin cuenta (una familia interesada desde el sitio).
+-- Solicitudes de clase de prueba — lo llena una familia interesada,
+-- que tiene que iniciar sesión o crear una cuenta primero.
 create table if not exists public.solicitudes (
   id uuid primary key default gen_random_uuid(),
   nombre text not null,
@@ -170,11 +170,11 @@ insert into public.config (clave, valor) values ('costos_fijos_mxn', '45000')
 -- ================================================================
 -- Seguridad (Row Level Security)
 --
--- Todo lo de arriba es información interna del negocio: solo la
--- puede ver o cambiar alguien logueado (staff). Las dos excepciones
--- son "solicitudes" e "inscripciones": cualquier visitante del
--- sitio puede CREAR una fila (enviar el formulario), pero no puede
--- leer ni cambiar las de los demás — eso también es solo para staff.
+-- Todo lo de arriba pide haber iniciado sesión (cualquier cuenta,
+-- no hace falta ser staff) para poder leer o escribir. Ver el sitio
+-- público no requiere cuenta — solo reservar una clase de prueba o
+-- inscribirse/pagar, que es cuando la app pide iniciar sesión o
+-- crear una cuenta.
 -- ================================================================
 
 alter table public.perfiles enable row level security;
@@ -213,15 +213,21 @@ create policy "staff todo contactos" on public.contactos for all to authenticate
 drop policy if exists "staff todo config" on public.config;
 create policy "staff todo config" on public.config for all to authenticated using (true) with check (true);
 
+-- Reservar una clase de prueba o inscribirse/pagar también pide haber
+-- iniciado sesión (cualquier cuenta sirve, no hace falta ser staff) —
+-- así cada solicitud queda ligada a una cuenta real, no a un visitante
+-- anónimo.
 drop policy if exists "cualquiera envia solicitud" on public.solicitudes;
-create policy "cualquiera envia solicitud" on public.solicitudes for insert to anon, authenticated with check (true);
+drop policy if exists "logueado envia solicitud" on public.solicitudes;
+create policy "logueado envia solicitud" on public.solicitudes for insert to authenticated with check (true);
 drop policy if exists "staff ve solicitudes" on public.solicitudes;
 create policy "staff ve solicitudes" on public.solicitudes for select to authenticated using (true);
 drop policy if exists "staff actualiza solicitudes" on public.solicitudes;
 create policy "staff actualiza solicitudes" on public.solicitudes for update to authenticated using (true);
 
 drop policy if exists "cualquiera se inscribe" on public.inscripciones;
-create policy "cualquiera se inscribe" on public.inscripciones for insert to anon, authenticated with check (true);
+drop policy if exists "logueado se inscribe" on public.inscripciones;
+create policy "logueado se inscribe" on public.inscripciones for insert to authenticated with check (true);
 drop policy if exists "staff ve inscripciones" on public.inscripciones;
 create policy "staff ve inscripciones" on public.inscripciones for select to authenticated using (true);
 drop policy if exists "staff actualiza inscripciones" on public.inscripciones;

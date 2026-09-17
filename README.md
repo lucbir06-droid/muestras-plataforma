@@ -37,8 +37,10 @@ equilibrio, pagos pendientes, eliminar alumnos) · Chat (vista previa).
 - El **sitio público** (`index.html`) es contenido real, con los precios
   reales de Millán, listo para mostrarse.
 - El **panel** (`app/`) ahora pide **login real** (Supabase Auth) para
-  entrar — excepto las dos pantallas públicas (`/clases-prueba` y
-  `/inscribirse`), que cualquiera puede llenar sin cuenta.
+  entrar a todo, sin excepción — incluido reservar una clase de prueba
+  o inscribirse/pagar. Ver el sitio público (`index.html`) no pide
+  cuenta; el login aparece recién cuando tocan "Reservar clase de
+  prueba" o "Inscribirme".
 - **La mayoría de los datos siguen en el navegador (`localStorage`) de
   quien los carga**, no en un servidor compartido — si Millán y un profe
   entran cada uno desde su celular, cada uno ve su propia copia de
@@ -73,6 +75,10 @@ inscripción en su lugar.
 
 Ya está conectado (`assets/js/supabase-client.js`). Lo que falta para que
 funcione del todo:
+
+⚠️ Si ya habías corrido `schema.sql` antes, **volvé a correrlo** — cambió
+el permiso de "solicitudes" e "inscripciones": antes cualquiera podía
+enviarlas sin cuenta, ahora piden estar logueado, igual que el resto.
 
 ### 1. Crear las tablas (una sola vez)
 

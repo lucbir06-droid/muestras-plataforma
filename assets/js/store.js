@@ -16,7 +16,10 @@ import { sb } from "./supabase-client.js";
 
 const DB_KEY = "millan_academy_v2";
 
-const SEDES = ["Polanco", "Metepec", "Miami", "LA", "Nueva York", "París", "A domicilio"];
+// Dónde se entrena de verdad (agenda, check-ins, alta de alumnos).
+// Miami, LA, Nueva York, París, etc. son ciudades de origen de alumnos
+// internacionales, no sedes propias — eso se muestra aparte en el sitio.
+const SEDES = ["Polanco", "Metepec"];
 const CATEGORIAS = ["1ra División", "2da División", "3ra División", "4ta División"];
 const COACHES = ["Daniel Millán", "Eduardo Millán"];
 const TALLAS = ["Niño - S", "Niño - M", "Niño - L", "Adulto - S", "Adulto - M", "Adulto - L", "Adulto - XL"];
@@ -77,7 +80,7 @@ function seed() {
         id: "al_3",
         nombre: "Kevin Ortiz",
         categoria: "1ra División",
-        sede: "Miami",
+        sede: "Polanco",
         coach: "Daniel Millán",
         moneda: "USD",
         telefono: "+1 305 555 0192",
@@ -96,7 +99,7 @@ function seed() {
         id: "al_4",
         nombre: "Valentina Cruz",
         categoria: "4ta División",
-        sede: "LA",
+        sede: "Metepec",
         coach: "Eduardo Millán",
         moneda: "USD",
         telefono: "+1 213 555 0148",
@@ -134,10 +137,10 @@ function seed() {
     reservas: [
       { id: uid("res"), alumnoId: "al_1", fecha: days(1), hora: "20:00", tipo: "Entrenamiento individual", duracion: 60, sede: "Polanco", estado: "confirmada" },
       { id: uid("res"), alumnoId: "al_2", fecha: days(2), hora: "19:00", tipo: "Entrenamiento individual", duracion: 60, sede: "Metepec", estado: "confirmada" },
-      { id: uid("res"), alumnoId: null, fecha: days(2), hora: "21:00", tipo: "Diagnóstico", duracion: 20, sede: "A domicilio", estado: "disponible" },
-      { id: uid("res"), alumnoId: "al_3", fecha: days(3), hora: "10:00", tipo: "Clase de prueba", duracion: 45, sede: "Miami", estado: "confirmada" },
+      { id: uid("res"), alumnoId: null, fecha: days(2), hora: "21:00", tipo: "Diagnóstico", duracion: 20, sede: "Metepec", estado: "disponible" },
+      { id: uid("res"), alumnoId: "al_3", fecha: days(3), hora: "10:00", tipo: "Clase de prueba", duracion: 45, sede: "Polanco", estado: "confirmada" },
       { id: uid("res"), alumnoId: null, fecha: days(5), hora: "19:00", tipo: "Clase de prueba", duracion: 45, sede: "Polanco", estado: "disponible" },
-      { id: uid("res"), alumnoId: "al_4", fecha: days(4), hora: "22:00", tipo: "Entrenamiento individual", duracion: 60, sede: "LA", estado: "confirmada" },
+      { id: uid("res"), alumnoId: "al_4", fecha: days(4), hora: "22:00", tipo: "Entrenamiento individual", duracion: 60, sede: "Metepec", estado: "confirmada" },
     ],
 
     pagos: [
