@@ -36,14 +36,18 @@ equilibrio, pagos pendientes, eliminar alumnos) · Chat (vista previa).
 
 - El **sitio público** (`index.html`) es contenido real, con los precios
   reales de Millán, listo para mostrarse.
-- El **panel** (`app/`) funciona de verdad en el navegador — pero **todo se
-  guarda en el navegador (`localStorage`) de quien lo usa**, no en un
-  servidor compartido. Si Millán y un profe lo abren cada uno en su celular,
-  cada uno ve su propia copia de los datos; esto se resuelve conectando
-  Supabase (ver abajo).
-- **No hay login/permisos reales todavía.** La sección "Dueños" está
-  armada pero cualquiera que entre al panel puede verla — se restringe
-  cuando haya login real.
+- El **panel** (`app/`) ahora pide **login real** (Supabase Auth) para
+  entrar — excepto las dos pantallas públicas (`/clases-prueba` y
+  `/inscribirse`), que cualquiera puede llenar sin cuenta.
+- **La mayoría de los datos siguen en el navegador (`localStorage`) de
+  quien los carga**, no en un servidor compartido — si Millán y un profe
+  entran cada uno desde su celular, cada uno ve su propia copia de
+  alumnos/agenda/pagos. Las excepciones son **solicitudes** e
+  **inscripciones**, que ya viven en Supabase y sí se comparten de
+  verdad. Migrar el resto es la siguiente etapa.
+- **Todavía no hay roles/permisos** (dueño vs. profe) — cualquiera con una
+  cuenta ve todo, incluida la sección "Dueños". Se puede afinar más
+  adelante con la tabla `perfiles` que ya está en el esquema.
 - **El chat es solo una vista previa** — no manda mensajes de verdad
   todavía (necesita Supabase Realtime).
 - **Los pagos con tarjeta no cobran solos.** El botón "Elegir plan" del
@@ -65,22 +69,47 @@ Se puede hacer plan por plan — no hace falta tener los 9 links para que
 el sitio funcione; los que no tengan link muestran el formulario de
 inscripción en su lugar.
 
-## Pasar a una base de datos real (Supabase)
+## Supabase — estado actual
 
-Esto es necesario para: login real con permisos, que todos vean los mismos
-datos desde cualquier celular, y el chat en vivo.
+Ya está conectado (`assets/js/supabase-client.js`). Lo que falta para que
+funcione del todo:
 
-1. Entrar a **https://supabase.com** e iniciar sesión con Google (gratis).
-2. Crear un proyecto nuevo (elegir una contraseña de base de datos y
-   guardarla en un lugar seguro).
-3. En el proyecto → **Project Settings → API**, copiar:
-   - **Project URL**
-   - **anon public key**
-4. Pasarme esos dos datos (no hace falta compartir la contraseña de la
-   base de datos ni ninguna otra clave).
+### 1. Crear las tablas (una sola vez)
 
-Con eso puedo conectar el panel a una base de datos compartida de verdad y
-armar el login. Es un cambio grande, se hace como una etapa aparte.
+1. Entrar al proyecto en supabase.com → menú izquierdo → **SQL Editor**.
+2. **New query**.
+3. Abrir [`supabase/schema.sql`](supabase/schema.sql) de este repo, copiar
+   todo el contenido y pegarlo ahí.
+4. Click **Run**.
+
+Se puede volver a correr sin problema si hace falta (no borra datos que ya
+existan).
+
+### 2. Crear las cuentas del staff (Millán + cada profe)
+
+Todavía no hay pantalla de "crear cuenta" dentro de la app — a propósito,
+para que no se pueda registrar cualquiera. Se crean así:
+
+1. En Supabase → **Authentication → Users → Add user**.
+2. Poner el email y una contraseña.
+3. Activar **"Auto Confirm User"** (si no, le manda un correo de
+   verificación que no necesitamos por ahora).
+4. Repetir por cada persona que necesite entrar al panel.
+
+Con eso ya pueden iniciar sesión en `app/` con ese email y contraseña.
+
+### Qué quedó conectado a Supabase (comparte datos entre celulares) vs. qué sigue local
+
+- ✅ **Solicitudes de clase de prueba** e **Inscripciones** — ya viven en
+  Supabase. Cualquiera que llene esos formularios (con o sin cuenta) y
+  cualquier miembro del staff logueado (desde cualquier celular) ve lo
+  mismo.
+- 🔒 **Todo el resto del panel** (alumnos, bitácora, agenda, pagos,
+  check-ins, objetivos de profes) ahora **requiere haber iniciado
+  sesión**, pero los datos en sí siguen guardados en el navegador de
+  quien los carga — todavía no están compartidos. Es la siguiente parte
+  de la migración.
+- 💬 **Chat**: sigue siendo solo una vista previa.
 
 ## Actualizar el sitio
 

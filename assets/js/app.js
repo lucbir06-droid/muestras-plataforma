@@ -1,6 +1,11 @@
 import { Store } from "./store.js";
 import { WEB3FORMS_ACCESS_KEY } from "./config.js";
 import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js";
+import { sb } from "./supabase-client.js";
+
+// rutas que se pueden ver SIN haber iniciado sesión (las llena gente
+// de afuera: una familia interesada, no hace falta que tenga cuenta)
+const RUTAS_PUBLICAS = ["/clases-prueba", "/inscribirse"];
 
 /* =========================================================
    Millán Academy — panel interno
@@ -164,7 +169,74 @@ function renderNav(path) {
   }).join("");
 }
 
-window.addEventListener("hashchange", render);
+/* ---------------- login / sesión ---------------- */
+let session = null;
+
+function LoginView(errorMsg) {
+  return `
+    <div style="max-width:380px;margin:64px auto 0;">
+      <div class="card">
+        <h2 style="margin-bottom:4px;">Iniciar sesión</h2>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Panel interno · Millán Academy</p>
+        ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
+        <form id="loginForm">
+          <div class="field"><label>Email</label><input name="email" type="email" required autocomplete="username" /></div>
+          <div class="field"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password" /></div>
+          <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Entrar</button>
+        </form>
+      </div>
+    </div>`;
+}
+
+function wireLogin() {
+  const form = document.getElementById("loginForm");
+  if (!form) return;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector("button");
+    btn.disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email: form.email.value.trim(), password: form.password.value });
+    if (error) {
+      view.innerHTML = LoginView(error.message.includes("Invalid") ? "Email o contraseña incorrectos." : error.message);
+      wireLogin();
+    }
+    // si funcionó, onAuthStateChange llama a route() solo
+  });
+}
+
+async function route() {
+  const path = currentPath();
+  const esPublica = RUTAS_PUBLICAS.some((r) => path === r || path.startsWith(r));
+  const side = document.querySelector(".side");
+  const resetBtn = document.getElementById("resetDemo");
+
+  if (!session && !esPublica) {
+    side.style.display = "none";
+    resetBtn.style.display = "none";
+    pageTitle.textContent = "Iniciar sesión";
+    view.innerHTML = LoginView();
+    wireLogin();
+    return;
+  }
+  side.style.display = session ? "" : "none";
+  resetBtn.style.display = session ? "" : "none";
+  await Store.ready;
+  render();
+}
+
+async function init() {
+  const { data } = await sb.auth.getSession();
+  session = data.session;
+  sb.auth.onAuthStateChange((_event, newSession) => {
+    session = newSession;
+    route();
+  });
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) logoutBtn.addEventListener("click", () => sb.auth.signOut());
+  route();
+}
+
+window.addEventListener("hashchange", route);
 
 /* ---------------- views ---------------- */
 
@@ -1011,7 +1083,7 @@ function Chat() {
 }
 
 /* ---------------- actions (delegated) ---------------- */
-view.addEventListener("submit", (e) => {
+view.addEventListener("submit", async (e) => {
   const form = e.target.closest("form[data-action]");
   if (!form) return;
   e.preventDefault();
@@ -1058,20 +1130,28 @@ view.addEventListener("submit", (e) => {
     Store.reservar(form.dataset.id, data.alumnoId);
     toast("Sesión reservada");
   } else if (action === "add-solicitud") {
-    Store.addSolicitud({ nombre: data.nombre.trim(), edad: Number(data.edad), telefono: data.telefono.trim(), pais: data.pais.trim(), zona: data.zona.trim(), sede: data.sede, mensaje: data.mensaje?.trim() || "" });
-    toast("Solicitud enviada");
+    try {
+      await Store.addSolicitud({ nombre: data.nombre.trim(), edad: Number(data.edad), telefono: data.telefono.trim(), pais: data.pais.trim(), zona: data.zona.trim(), sede: data.sede, mensaje: data.mensaje?.trim() || "" });
+      toast("Solicitud enviada");
+    } catch (err) {
+      toast("No se pudo enviar — revisá tu conexión e intentá de nuevo");
+    }
   } else if (action === "add-pago") {
     Store.addPago({ alumnoId: data.alumnoId, concepto: data.concepto.trim(), metodo: data.metodo, moneda: data.moneda, monto: Number(data.monto), estado: data.estado });
     toast("Pago registrado");
   } else if (action === "inscribirse") {
     const [planId, durId] = data.planDur.split(":");
     const found = encontrarDuracion(planId, durId);
-    Store.addInscripcion({
-      nombre: data.nombre.trim(), telefono: data.telefono.trim(), tallaPlayera: data.tallaPlayera,
-      planId, duracionId: durId, planNombre: found?.plan.nombre || planId, duracionLabel: found?.dur.label || durId,
-      monto: found?.dur.real || 0, moneda: found?.plan.moneda || "MXN",
-    });
-    toast("Inscripción enviada — Millán te contacta para confirmar el pago");
+    try {
+      await Store.addInscripcion({
+        nombre: data.nombre.trim(), telefono: data.telefono.trim(), tallaPlayera: data.tallaPlayera,
+        planId, duracionId: durId, planNombre: found?.plan.nombre || planId, duracionLabel: found?.dur.label || durId,
+        monto: found?.dur.real || 0, moneda: found?.plan.moneda || "MXN",
+      });
+      toast("Inscripción enviada — Millán te contacta para confirmar el pago");
+    } catch (err) {
+      toast("No se pudo enviar — revisá tu conexión e intentá de nuevo");
+    }
   } else if (action === "add-objetivo-categoria") {
     Store.addObjetivoCategoria({ categoria: data.categoria, profe: data.profe, titulo: data.titulo.trim(), detalle: data.detalle?.trim() || "" });
     toast("Objetivo publicado");
@@ -1082,18 +1162,22 @@ view.addEventListener("submit", (e) => {
   render();
 });
 
-view.addEventListener("click", (e) => {
+view.addEventListener("click", async (e) => {
   const solicitudBtn = e.target.closest("[data-action='solicitud-estado']");
   if (solicitudBtn) {
-    Store.actualizarSolicitud(solicitudBtn.dataset.id, solicitudBtn.dataset.estado);
-    toast(solicitudBtn.dataset.estado === "confirmada" ? "Solicitud confirmada" : "Solicitud rechazada");
+    try {
+      await Store.actualizarSolicitud(solicitudBtn.dataset.id, solicitudBtn.dataset.estado);
+      toast(solicitudBtn.dataset.estado === "confirmada" ? "Solicitud confirmada" : "Solicitud rechazada");
+    } catch (err) { toast("No se pudo actualizar — revisá tu conexión"); }
     render();
     return;
   }
   const inscripcionBtn = e.target.closest("[data-action='inscripcion-estado']");
   if (inscripcionBtn) {
-    Store.actualizarInscripcion(inscripcionBtn.dataset.id, inscripcionBtn.dataset.estado);
-    toast("Inscripción activada");
+    try {
+      await Store.actualizarInscripcion(inscripcionBtn.dataset.id, inscripcionBtn.dataset.estado);
+      toast("Inscripción activada");
+    } catch (err) { toast("No se pudo actualizar — revisá tu conexión"); }
     render();
     return;
   }
@@ -1113,4 +1197,4 @@ document.getElementById("resetDemo").addEventListener("click", () => {
   toast("Datos de ejemplo reiniciados");
 });
 
-render();
+init();

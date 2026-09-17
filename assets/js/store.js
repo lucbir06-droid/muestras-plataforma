@@ -1,10 +1,18 @@
 /* =========================================================
-   Millán Academy — capa de datos (demo local)
-   Todo se guarda en localStorage del navegador. No hay
-   backend todavía: esto sirve para probar la app con datos
-   reales de ejemplo antes de conectarla a una base de datos
-   compartida de verdad (Supabase — siguiente etapa).
+   Millán Academy — capa de datos
+   =========================================================
+
+   La mayoría de las colecciones (alumnos, bitácora, agenda, pagos,
+   check-ins, objetivos de profes) todavía viven en localStorage —
+   sirven para probar la app, pero cada navegador ve su propia copia.
+
+   "solicitudes" e "inscripciones" ya son distintas: esas las llena
+   gente SIN cuenta desde el sitio público, así que viven en Supabase
+   (compartidas de verdad) desde el primer día. El resto se va a ir
+   migrando ahí en la próxima etapa.
    ========================================================= */
+
+import { sb } from "./supabase-client.js";
 
 const DB_KEY = "millan_academy_v2";
 
@@ -132,13 +140,6 @@ function seed() {
       { id: uid("res"), alumnoId: "al_4", fecha: days(4), hora: "22:00", tipo: "Entrenamiento individual", duracion: 60, sede: "LA", estado: "confirmada" },
     ],
 
-    solicitudes: [
-      { id: uid("sol"), nombre: "Renata Solís", edad: 14, telefono: "+52 55 4455 6677", pais: "México", zona: "GMT-6", sede: "Polanco",
-        mensaje: "Portera 2da división, juega en fuerzas básicas. Busca clase de prueba entre semana.", fecha: past(1), estado: "pendiente" },
-      { id: uid("sol"), nombre: "Takeshi Mori", edad: 16, telefono: "+81 90 1234 5678", pais: "Japón", zona: "GMT+9", sede: "A domicilio",
-        mensaje: "Vive en Japón, quiere probar una sesión antes de viajar a un campus en Miami.", fecha: past(2), estado: "pendiente" },
-    ],
-
     pagos: [
       { id: uid("pg"), alumnoId: "al_1", concepto: "Plan mensual · Polanco", metodo: "Mercado Pago", monto: 3349, moneda: "MXN", periodicidad: "mensual", fecha: past(6), estado: "pagado" },
       { id: uid("pg"), alumnoId: "al_2", concepto: "Plan mensual · Metepec", metodo: "Transferencia", monto: 2799, moneda: "MXN", periodicidad: "mensual", fecha: past(11), estado: "pagado" },
@@ -164,10 +165,6 @@ function seed() {
       { id: uid("oc"), categoria: "4ta División", profe: "Daniel Millán", titulo: "Perder el miedo al balón",
         detalle: "Ejercicios progresivos de salidas cortas y caídas controladas.", fecha: past(4) },
     ],
-
-    // solicitudes de inscripción (botón "Inscribirse" del sitio) — pendientes de pago
-    // hasta que el plan tenga un link de Mercado Pago conectado.
-    inscripciones: [],
 
     // contacto para plan personalizado
     contactos: [],
@@ -213,8 +210,41 @@ function proximaFecha(diaNombre, semanasAdelante) {
   return fecha.toISOString();
 }
 
+/* =========================================================
+   solicitudes e inscripciones — respaldadas por Supabase.
+   Guardamos una copia en memoria (_solicitudes/_inscripciones) que
+   se refresca después de cada cambio, así el resto del código las
+   lee de forma sincrónica igual que a las demás colecciones.
+   ========================================================= */
+let _solicitudes = [];
+let _inscripciones = [];
+
+function mapSolicitud(row) {
+  return { id: row.id, nombre: row.nombre, edad: row.edad, telefono: row.telefono, pais: row.pais, zona: row.zona, sede: row.sede, mensaje: row.mensaje, estado: row.estado, fecha: row.fecha };
+}
+function mapInscripcion(row) {
+  return {
+    id: row.id, nombre: row.nombre, telefono: row.telefono, planId: row.plan_id, duracionId: row.duracion_id,
+    planNombre: row.plan_nombre, duracionLabel: row.duracion_label, monto: row.monto, moneda: row.moneda,
+    tallaPlayera: row.talla_playera, estado: row.estado, fecha: row.fecha,
+  };
+}
+
+async function cargarSolicitudes() {
+  const { data, error } = await sb.from("solicitudes").select("*").order("fecha", { ascending: false });
+  if (!error && data) _solicitudes = data.map(mapSolicitud);
+  // si hay error (ej. todavía no iniciaste sesión, o no se corrió el schema.sql) dejamos la lista como estaba
+}
+async function cargarInscripciones() {
+  const { data, error } = await sb.from("inscripciones").select("*").order("fecha", { ascending: false });
+  if (!error && data) _inscripciones = data.map(mapInscripcion);
+}
+
+const ready = Promise.all([cargarSolicitudes(), cargarInscripciones()]);
+
 export const Store = {
   SEDES, CATEGORIAS, COACHES, TALLAS, DIAS_DISPONIBLES, HORAS_DISPONIBLES,
+  ready,
 
   all() { return state; },
 
@@ -294,20 +324,22 @@ export const Store = {
     return creados;
   },
 
-  // ---- solicitudes de clase de prueba ----
+  // ---- solicitudes de clase de prueba (Supabase — compartidas de verdad) ----
   solicitudes() {
-    return state.solicitudes.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    return _solicitudes;
   },
-  addSolicitud(entry) {
-    const s = { id: uid("sol"), fecha: new Date().toISOString(), estado: "pendiente", ...entry };
-    state.solicitudes.unshift(s);
-    save(state);
-    return s;
+  async addSolicitud(entry) {
+    const { data, error } = await sb.from("solicitudes").insert({
+      nombre: entry.nombre, edad: entry.edad, telefono: entry.telefono, pais: entry.pais, zona: entry.zona, sede: entry.sede, mensaje: entry.mensaje,
+    }).select().single();
+    if (error) throw error;
+    await cargarSolicitudes();
+    return mapSolicitud(data);
   },
-  actualizarSolicitud(id, estado) {
-    const s = state.solicitudes.find(x => x.id === id);
-    if (s) { s.estado = estado; save(state); }
-    return s;
+  async actualizarSolicitud(id, estado) {
+    const { error } = await sb.from("solicitudes").update({ estado }).eq("id", id);
+    if (error) throw error;
+    await cargarSolicitudes();
   },
 
   // ---- pagos ----
@@ -351,20 +383,24 @@ export const Store = {
     return o;
   },
 
-  // ---- inscripciones (botón "Inscribirse" del sitio) ----
+  // ---- inscripciones (botón "Inscribirse" del sitio, Supabase — compartidas de verdad) ----
   inscripciones() {
-    return state.inscripciones.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    return _inscripciones;
   },
-  addInscripcion(entry) {
-    const i = { id: uid("ins"), fecha: new Date().toISOString(), estado: "pendiente de pago", ...entry };
-    state.inscripciones.unshift(i);
-    save(state);
-    return i;
+  async addInscripcion(entry) {
+    const { data, error } = await sb.from("inscripciones").insert({
+      nombre: entry.nombre, telefono: entry.telefono, plan_id: entry.planId, duracion_id: entry.duracionId,
+      plan_nombre: entry.planNombre, duracion_label: entry.duracionLabel, monto: entry.monto, moneda: entry.moneda,
+      talla_playera: entry.tallaPlayera,
+    }).select().single();
+    if (error) throw error;
+    await cargarInscripciones();
+    return mapInscripcion(data);
   },
-  actualizarInscripcion(id, estado) {
-    const i = state.inscripciones.find((x) => x.id === id);
-    if (i) { i.estado = estado; save(state); }
-    return i;
+  async actualizarInscripcion(id, estado) {
+    const { error } = await sb.from("inscripciones").update({ estado }).eq("id", id);
+    if (error) throw error;
+    await cargarInscripciones();
   },
 
   // ---- contacto para plan personalizado ----
