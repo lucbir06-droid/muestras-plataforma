@@ -221,6 +221,7 @@ function proximaFecha(diaNombre, semanasAdelante) {
    ========================================================= */
 let _solicitudes = [];
 let _inscripciones = [];
+let _evidencias = [];
 
 function mapSolicitud(row) {
   return { id: row.id, nombre: row.nombre, edad: row.edad, telefono: row.telefono, pais: row.pais, zona: row.zona, sede: row.sede, mensaje: row.mensaje, estado: row.estado, fecha: row.fecha };
@@ -243,7 +244,17 @@ async function cargarInscripciones() {
   if (!error && data) _inscripciones = data.map(mapInscripcion);
 }
 
-const ready = Promise.all([cargarSolicitudes(), cargarInscripciones()]);
+function mapEvidencia(row) {
+  let fotoUrl = null;
+  if (row.foto_path) fotoUrl = sb.storage.from("evidencias").getPublicUrl(row.foto_path).data.publicUrl;
+  return { id: row.id, alumnoNombre: row.alumno_nombre, tipo: row.tipo, comentario: row.comentario, fotoUrl, fecha: row.fecha };
+}
+async function cargarEvidencias() {
+  const { data, error } = await sb.from("evidencias").select("*").order("fecha", { ascending: false });
+  if (!error && data) _evidencias = data.map(mapEvidencia);
+}
+
+const ready = Promise.all([cargarSolicitudes(), cargarInscripciones(), cargarEvidencias()]);
 
 export const Store = {
   SEDES, CATEGORIAS, COACHES, TALLAS, DIAS_DISPONIBLES, HORAS_DISPONIBLES,
@@ -404,6 +415,28 @@ export const Store = {
     const { error } = await sb.from("inscripciones").update({ estado }).eq("id", id);
     if (error) throw error;
     await cargarInscripciones();
+  },
+
+  // ---- evidencias (pruebas que sube el alumno: gym, comidas, etc.) ----
+  evidencias() {
+    return _evidencias;
+  },
+  evidenciasDe(alumnoNombre) {
+    return _evidencias.filter((e) => e.alumnoNombre.toLowerCase() === alumnoNombre.toLowerCase());
+  },
+  async addEvidencia({ alumnoNombre, tipo, comentario, fotoBlob }) {
+    let fotoPath = null;
+    if (fotoBlob) {
+      fotoPath = `${Date.now()}-${uid("ev")}.jpg`;
+      const { error: upErr } = await sb.storage.from("evidencias").upload(fotoPath, fotoBlob, { contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+    }
+    const { data, error } = await sb.from("evidencias").insert({
+      alumno_nombre: alumnoNombre, tipo, comentario, foto_path: fotoPath,
+    }).select().single();
+    if (error) throw error;
+    await cargarEvidencias();
+    return mapEvidencia(data);
   },
 
   // ---- contacto para plan personalizado ----

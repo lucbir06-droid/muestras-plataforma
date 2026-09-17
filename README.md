@@ -26,10 +26,12 @@ cualquier archivo y subirlo directo a GitHub sin instalar nada.
 
 ## Pantallas del panel (`app/`)
 
-Panel · Check-in (foto + email a Millán) · Alumnos · Agenda · Clases de
-prueba · Inscripciones (desde el botón "Inscribirme" del sitio) · Objetivos
-de profes (por categoría, lo ven alumnos y profes) · Reportes (táctica /
-técnica / físico + comentarios) · Pagos · Dueños (financiero, punto de
+Panel · Check-in (foto + email a Millán) · Evidencias (el alumno sube
+foto de que hizo lo que se le pidió: gym, comidas del plan de
+nutrición, etc.) · Alumnos · Agenda · Clases de prueba · Inscripciones
+(desde el botón "Inscribirme" del sitio) · Objetivos de profes (por
+categoría, lo ven alumnos y profes) · Reportes (táctica / técnica /
+físico + comentarios) · Pagos · Dueños (financiero, punto de
 equilibrio, pagos pendientes, eliminar alumnos) · Chat (vista previa).
 
 ## Estado actual — qué es real y qué es demo
@@ -76,9 +78,11 @@ inscripción en su lugar.
 Ya está conectado (`assets/js/supabase-client.js`). Lo que falta para que
 funcione del todo:
 
-⚠️ Si ya habías corrido `schema.sql` antes, **volvé a correrlo** — cambió
-el permiso de "solicitudes" e "inscripciones": antes cualquiera podía
+⚠️ Si ya habías corrido `schema.sql` antes, **volvé a correrlo** — se
+agregó la tabla `evidencias` (con su bucket de fotos) y cambió el
+permiso de "solicitudes" e "inscripciones": antes cualquiera podía
 enviarlas sin cuenta, ahora piden estar logueado, igual que el resto.
+Correrlo de nuevo no borra nada de lo que ya tenías.
 
 ### 1. Crear las tablas (una sola vez)
 

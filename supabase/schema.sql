@@ -167,6 +167,26 @@ create table if not exists public.config (
 insert into public.config (clave, valor) values ('costos_fijos_mxn', '45000')
   on conflict (clave) do nothing;
 
+-- Evidencias: pruebas que sube el propio alumno de que hizo lo que se
+-- le pidió (fue al gym tal día, su comida del plan de nutrición, etc.)
+-- "alumno_nombre" es texto libre (no un id) porque los alumnos todavía
+-- viven en el navegador de cada quien, no en Supabase.
+create table if not exists public.evidencias (
+  id uuid primary key default gen_random_uuid(),
+  alumno_nombre text not null,
+  tipo text not null,
+  comentario text,
+  foto_path text,
+  fecha timestamptz not null default now()
+);
+
+-- Bucket de fotos de evidencias. Público (no hace falta clave para
+-- verlas) porque son fotos de bajo riesgo (gym, comidas) y así no hace
+-- falta armar links firmados; las rutas son al azar, no adivinables.
+insert into storage.buckets (id, name, public)
+  values ('evidencias', 'evidencias', true)
+  on conflict (id) do update set public = true;
+
 -- ================================================================
 -- Seguridad (Row Level Security)
 --
@@ -188,6 +208,7 @@ alter table public.checkins enable row level security;
 alter table public.objetivos_categoria enable row level security;
 alter table public.contactos enable row level security;
 alter table public.config enable row level security;
+alter table public.evidencias enable row level security;
 
 drop policy if exists "staff ve perfiles" on public.perfiles;
 create policy "staff ve perfiles" on public.perfiles for select to authenticated using (true);
@@ -212,6 +233,13 @@ drop policy if exists "staff todo contactos" on public.contactos;
 create policy "staff todo contactos" on public.contactos for all to authenticated using (true) with check (true);
 drop policy if exists "staff todo config" on public.config;
 create policy "staff todo config" on public.config for all to authenticated using (true) with check (true);
+drop policy if exists "logueado todo evidencias" on public.evidencias;
+create policy "logueado todo evidencias" on public.evidencias for all to authenticated using (true) with check (true);
+
+-- Subir fotos al bucket "evidencias" también pide sesión iniciada.
+drop policy if exists "logueado sube evidencias" on storage.objects;
+create policy "logueado sube evidencias" on storage.objects for insert to authenticated
+  with check (bucket_id = 'evidencias');
 
 -- Reservar una clase de prueba o inscribirse/pagar también pide haber
 -- iniciado sesión (cualquier cuenta sirve, no hace falta ser staff) —

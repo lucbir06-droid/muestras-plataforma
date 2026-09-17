@@ -21,6 +21,7 @@ const sidenav = document.getElementById("sidenav");
 const NAV = [
   { path: "/", label: "Panel", icon: "i-dashboard" },
   { path: "/checkin", label: "Check-in", icon: "i-camera", countKey: "checkinsError" },
+  { path: "/evidencias", label: "Evidencias", icon: "i-task" },
   { path: "/alumnos", label: "Alumnos", icon: "i-users" },
   { path: "/agenda", label: "Agenda", icon: "i-calendar" },
   { path: "/clases-prueba", label: "Clases de prueba", icon: "i-play", countKey: "solicitudesPendientes" },
@@ -114,6 +115,9 @@ function render() {
   } else if (path === "/checkin") {
     title = "Check-in";
     html = Checkin();
+  } else if (path === "/evidencias") {
+    title = "Evidencias";
+    html = Evidencias();
   } else if (path === "/alumnos") {
     title = "Alumnos";
     html = AlumnosList();
@@ -516,6 +520,73 @@ async function handleCheckin(form) {
   render();
 }
 
+const TIPOS_EVIDENCIA = ["Gym", "Nutrición", "Otro"];
+
+function Evidencias() {
+  const evidencias = Store.evidencias();
+  return `
+    <div class="block">
+      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
+        Acá el alumno sube la prueba de que hizo lo que se le pidió — fue al gym
+        tal día, su comida del plan de nutrición, etc. Queda guardado con foto,
+        fecha y comentario para que el profe lo revise.
+      </p>
+      <form class="card" data-action="evidencia" style="max-width:460px;">
+        <div class="field"><label>Nombre del alumno</label><input name="alumnoNombre" required placeholder="Nombre y apellido" /></div>
+        <div class="field"><label>Tipo</label>
+          <select name="tipo">${TIPOS_EVIDENCIA.map((t) => `<option>${t}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label>Comentario</label><textarea name="comentario" placeholder="Ej. Fui al gym, hice pierna 45 min"></textarea></div>
+        <div class="field"><label>Foto</label><input name="foto" type="file" accept="image/*" capture="environment" required /></div>
+        <button class="btn btn-primary btn-sm" type="submit">${icon("i-task")} Subir evidencia</button>
+      </form>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Evidencias recientes</h3></div>
+      <div class="list">
+        ${evidencias.length ? evidencias.map(evidenciaRow).join("") : `<div class="empty">Todavía no hay evidencias.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function evidenciaRow(e) {
+  const tipoKind = e.tipo === "Gym" ? "ok" : e.tipo === "Nutrición" ? "warn" : "muted";
+  return `
+    <div class="row-card">
+      ${e.fotoUrl
+        ? `<img src="${e.fotoUrl}" alt="" style="width:48px;height:48px;border-radius:9px;object-fit:cover;flex:none;border:1px solid var(--line);" />`
+        : `<div class="avatar-sm">${esc(e.alumnoNombre.slice(0, 2).toUpperCase())}</div>`}
+      <div class="grow">
+        <div class="row-title">${esc(e.alumnoNombre)}</div>
+        ${e.comentario ? `<div class="row-sub" style="margin-top:2px;">${esc(e.comentario)}</div>` : ""}
+        <div class="row-sub" style="margin-top:2px;">${fmtDate(e.fecha)}</div>
+      </div>
+      ${badge(e.tipo, tipoKind)}
+    </div>`;
+}
+
+async function handleEvidencia(form) {
+  const alumnoNombre = form.elements.alumnoNombre.value.trim();
+  const tipo = form.elements.tipo.value;
+  const comentario = form.elements.comentario.value.trim();
+  const file = form.elements.foto.files[0];
+  if (!alumnoNombre || !file) return;
+
+  const submitBtn = form.querySelector("button[type=submit]");
+  submitBtn.disabled = true;
+
+  try {
+    const fotoBlob = await resizeImage(file, 1280, 0.8);
+    await Store.addEvidencia({ alumnoNombre, tipo, comentario, fotoBlob });
+    toast("Evidencia subida");
+  } catch (err) {
+    toast("No se pudo subir la evidencia — revisa tu conexión e intenta de nuevo");
+  }
+  render();
+}
+
 function AlumnosList() {
   const alumnos = Store.alumnos();
   return `
@@ -673,6 +744,16 @@ function AlumnoDetail(id) {
         <div class="block-head"><h3>Reservas</h3></div>
         <div class="list">${reservas.map(reservaRow).join("")}</div>
       </div>` : ""}
+
+    <div class="block">
+      <div class="block-head"><h3>Evidencias</h3><a href="#/evidencias">Subir nueva →</a></div>
+      ${(() => {
+        const evidenciasAlumno = Store.evidenciasDe(a.nombre);
+        return evidenciasAlumno.length
+          ? `<div class="list">${evidenciasAlumno.map(evidenciaRow).join("")}</div>`
+          : `<div class="empty">Todavía no subió evidencias.</div>`;
+      })()}
+    </div>
   `;
 }
 
@@ -1155,6 +1236,10 @@ view.addEventListener("submit", async (e) => {
   const action = form.dataset.action;
   if (action === "checkin") {
     handleCheckin(form);
+    return;
+  }
+  if (action === "evidencia") {
+    handleEvidencia(form);
     return;
   }
   const data = Object.fromEntries(new FormData(form).entries());
