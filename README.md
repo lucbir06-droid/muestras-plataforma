@@ -88,7 +88,7 @@ existan).
 ### 2. Crear las cuentas del staff (Millán + cada profe)
 
 Ahora se pueden crear solos desde la propia pantalla de login del panel
-(`app/`) → **"¿No tenés cuenta? Creá una"** → nombre, correo, teléfono,
+(`app/`) → **"¿No tienes cuenta? Crea una"** → nombre, correo, teléfono,
 país y contraseña.
 
 Para que puedan entrar de una, sin tener que confirmar el correo:

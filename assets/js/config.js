@@ -9,7 +9,7 @@
    1. Entrar a https://web3forms.com/
    2. Poner su email y tocar "Create Access Key".
    3. Le va a llegar un código (Access Key) a ese correo.
-   4. Pegar ese código acá abajo, entre las comillas.
+   4. Pegar ese código aquí abajo, entre las comillas.
    5. Subir este archivo a GitHub (o pedirle a Claude que lo suba).
 
    Mientras esto esté vacío, el check-in se sigue guardando en el panel,

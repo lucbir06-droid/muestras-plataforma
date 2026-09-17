@@ -172,34 +172,34 @@ function renderNav(path) {
 /* ---------------- login / registro / sesión ---------------- */
 let session = null;
 
-function AuthShell(inner) {
-  return `<div style="display:flex;align-items:center;justify-content:center;min-height:72vh;padding:20px 16px;">
-    <div style="max-width:380px;width:100%;">${inner}</div>
+function AuthShell(mode, inner) {
+  return `<div style="display:flex;align-items:center;justify-content:center;min-height:78vh;padding:20px 16px;box-sizing:border-box;">
+    <div style="max-width:400px;width:100%;">
+      <div class="card">
+        <div style="display:flex;gap:6px;background:var(--surface-2);padding:4px;border-radius:10px;margin-bottom:20px;">
+          <button type="button" id="tabLogin" class="btn ${mode === "login" ? "btn-primary" : "btn-ghost"} btn-sm" style="flex:1;border:0;">Iniciar sesión</button>
+          <button type="button" id="tabSignup" class="btn ${mode === "signup" ? "btn-primary" : "btn-ghost"} btn-sm" style="flex:1;border:0;">Crear cuenta</button>
+        </div>
+        ${inner}
+      </div>
+    </div>
   </div>`;
 }
 
 function LoginView(errorMsg, infoMsg) {
-  return AuthShell(`
-    <div class="card">
-      <h2 style="margin-bottom:4px;">Iniciar sesión</h2>
+  return AuthShell("login", `
       <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Panel interno · Millán Academy</p>
       ${infoMsg ? `<div class="mp-note" style="margin-bottom:16px;">${esc(infoMsg)}</div>` : ""}
       ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
       <form id="authForm">
-        <div class="field"><label>Email</label><input name="email" type="email" required autocomplete="username" /></div>
+        <div class="field"><label>Correo</label><input name="email" type="email" required autocomplete="username" /></div>
         <div class="field"><label>Contraseña</label><input name="password" type="password" required autocomplete="current-password" /></div>
         <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Entrar</button>
-      </form>
-      <p style="font-size:.8rem;color:var(--muted);margin-top:16px;text-align:center;">
-        ¿No tenés cuenta? <a href="#" id="toSignup" style="color:var(--accent-2);">Creá una</a>
-      </p>
-    </div>`);
+      </form>`);
 }
 
 function SignupView(errorMsg) {
-  return AuthShell(`
-    <div class="card">
-      <h2 style="margin-bottom:4px;">Crear cuenta</h2>
+  return AuthShell("signup", `
       <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Panel interno · Millán Academy</p>
       ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
       <form id="authForm">
@@ -209,29 +209,29 @@ function SignupView(errorMsg) {
         <div class="field"><label>País</label><input name="pais" required placeholder="México" /></div>
         <div class="field"><label>Contraseña</label><input name="password" type="password" required minlength="6" autocomplete="new-password" /></div>
         <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Crear cuenta</button>
-      </form>
-      <p style="font-size:.8rem;color:var(--muted);margin-top:16px;text-align:center;">
-        ¿Ya tenés cuenta? <a href="#" id="toLogin" style="color:var(--accent-2);">Iniciá sesión</a>
-      </p>
-    </div>`);
+      </form>`);
 }
 
 function showLogin(errorMsg, infoMsg) {
   pageTitle.textContent = "Iniciar sesión";
+  view.style.maxWidth = "none";
+  view.style.padding = "0";
   view.innerHTML = LoginView(errorMsg, infoMsg);
   wireAuthForms();
 }
 function showSignup(errorMsg) {
   pageTitle.textContent = "Crear cuenta";
+  view.style.maxWidth = "none";
+  view.style.padding = "0";
   view.innerHTML = SignupView(errorMsg);
   wireAuthForms();
 }
 
 function wireAuthForms() {
-  const toSignup = document.getElementById("toSignup");
-  if (toSignup) toSignup.addEventListener("click", (e) => { e.preventDefault(); showSignup(); });
-  const toLogin = document.getElementById("toLogin");
-  if (toLogin) toLogin.addEventListener("click", (e) => { e.preventDefault(); showLogin(); });
+  const toSignup = document.getElementById("tabSignup");
+  if (toSignup) toSignup.addEventListener("click", () => showSignup());
+  const toLogin = document.getElementById("tabLogin");
+  if (toLogin) toLogin.addEventListener("click", () => showLogin());
 
   const form = document.getElementById("authForm");
   if (!form) return;
@@ -249,11 +249,11 @@ function wireAuthForms() {
         options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim() } },
       });
       if (error) {
-        showSignup(error.message.includes("already registered") ? "Ese correo ya tiene una cuenta — iniciá sesión." : error.message);
+        showSignup(error.message.includes("already registered") ? "Ese correo ya tiene una cuenta — inicia sesión." : error.message);
         return;
       }
       if (!data.session) {
-        showLogin(null, "Cuenta creada. Si te pedimos confirmar el correo, revisá tu bandeja de entrada y después iniciá sesión acá.");
+        showLogin(null, "Cuenta creada. Si te pedimos confirmar el correo, revisa tu bandeja de entrada y después inicia sesión aquí.");
       }
       // si ya vino con sesión activa, onAuthStateChange dispara route() solo
     } else {
@@ -279,6 +279,8 @@ async function route() {
   }
   side.style.display = session ? "" : "none";
   resetBtn.style.display = session ? "" : "none";
+  view.style.maxWidth = "";
+  view.style.padding = "";
   await Store.ready;
   render();
 }
@@ -393,7 +395,7 @@ function Checkin() {
   return `
     <div class="block">
       <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
-        Cuando un profe llega a la cancha, se saca una foto acá mismo desde el celular.
+        Cuando un profe llega a la cancha, se saca una foto aquí mismo desde el celular.
         Queda guardada en el panel y le llega un email a Millán al instante.
       </p>
       <form class="card" data-action="checkin" style="max-width:460px;">
@@ -410,7 +412,7 @@ function Checkin() {
       ${!WEB3FORMS_ACCESS_KEY ? `
         <div class="mp-note" style="max-width:460px;margin-top:14px;">
           <b>Todavía no está conectado el email de Millán.</b> El check-in ya queda
-          guardado acá abajo, pero para que también llegue por email hace falta una
+          guardado aquí abajo, pero para que también llegue por email hace falta una
           Access Key gratis de <b>web3forms.com</b> pegada en <code>assets/js/config.js</code>.
         </div>` : ""}
     </div>
@@ -942,7 +944,7 @@ function Inscribirse(path) {
         Este es el formulario que ve la familia al tocar "Inscribirme" en el sitio. Si el
         plan ya tiene un link de pago de Mercado Pago conectado (en <code>assets/js/planes.js</code>),
         el botón de la página principal manda directo a pagar; si no, queda como solicitud
-        acá para que Millán la cobre y active la cuenta manualmente.
+        aquí para que Millán la cobre y active la cuenta manualmente.
       </p>
       ${found ? `<div class="mp-note" style="margin-bottom:16px;">Plan preseleccionado: <b>${esc(found.plan.nombre)} · ${esc(found.dur.label)}</b> — ${fmtMXN(found.dur.real)}</div>` : ""}
       <form class="card" data-action="inscribirse" style="max-width:460px;">
@@ -1055,7 +1057,7 @@ function Duenos() {
       <div class="block-head"><h3>Estado de resultados</h3></div>
       <div class="card">
         <p style="font-size:.9rem;color:var(--ink-soft);">
-          Este mes se sumaron <b>${nuevosDelMes} alumnos</b> nuevos. Tenés <b>${alumnos.length}</b>
+          Este mes se sumaron <b>${nuevosDelMes} alumnos</b> nuevos. Tienes <b>${alumnos.length}</b>
           alumnos activos en total, con <b>${fmtMoney(ingresosMXN, "MXN")}</b> y
           <b>${fmtMoney(ingresosUSD, "USD")}</b> cobrados hasta ahora.
         </p>
@@ -1073,7 +1075,7 @@ function Duenos() {
       <div class="card">
         <p style="font-size:.9rem;color:var(--ink-soft);">
           Con un plan mensual promedio de <b>${fmtMoney(promedioMensual, "MXN")}</b>, hacen falta
-          <b>${puntoEquilibrio} alumnos</b> pagando para cubrir esos costos fijos. Hoy tenés
+          <b>${puntoEquilibrio} alumnos</b> pagando para cubrir esos costos fijos. Hoy tienes
           <b>${alumnos.length}</b>${faltan > 0 ? ` — faltan <b>${faltan}</b> para llegar al punto de equilibrio.` : ", ya lo superaste."}
         </p>
       </div>
@@ -1193,7 +1195,7 @@ view.addEventListener("submit", async (e) => {
       await Store.addSolicitud({ nombre: data.nombre.trim(), edad: Number(data.edad), telefono: data.telefono.trim(), pais: data.pais.trim(), zona: data.zona.trim(), sede: data.sede, mensaje: data.mensaje?.trim() || "" });
       toast("Solicitud enviada");
     } catch (err) {
-      toast("No se pudo enviar — revisá tu conexión e intentá de nuevo");
+      toast("No se pudo enviar — revisa tu conexión e intenta de nuevo");
     }
   } else if (action === "add-pago") {
     Store.addPago({ alumnoId: data.alumnoId, concepto: data.concepto.trim(), metodo: data.metodo, moneda: data.moneda, monto: Number(data.monto), estado: data.estado });
@@ -1209,7 +1211,7 @@ view.addEventListener("submit", async (e) => {
       });
       toast("Inscripción enviada — Millán te contacta para confirmar el pago");
     } catch (err) {
-      toast("No se pudo enviar — revisá tu conexión e intentá de nuevo");
+      toast("No se pudo enviar — revisa tu conexión e intenta de nuevo");
     }
   } else if (action === "add-objetivo-categoria") {
     Store.addObjetivoCategoria({ categoria: data.categoria, profe: data.profe, titulo: data.titulo.trim(), detalle: data.detalle?.trim() || "" });
@@ -1227,7 +1229,7 @@ view.addEventListener("click", async (e) => {
     try {
       await Store.actualizarSolicitud(solicitudBtn.dataset.id, solicitudBtn.dataset.estado);
       toast(solicitudBtn.dataset.estado === "confirmada" ? "Solicitud confirmada" : "Solicitud rechazada");
-    } catch (err) { toast("No se pudo actualizar — revisá tu conexión"); }
+    } catch (err) { toast("No se pudo actualizar — revisa tu conexión"); }
     render();
     return;
   }
@@ -1236,7 +1238,7 @@ view.addEventListener("click", async (e) => {
     try {
       await Store.actualizarInscripcion(inscripcionBtn.dataset.id, inscripcionBtn.dataset.estado);
       toast("Inscripción activada");
-    } catch (err) { toast("No se pudo actualizar — revisá tu conexión"); }
+    } catch (err) { toast("No se pudo actualizar — revisa tu conexión"); }
     render();
     return;
   }

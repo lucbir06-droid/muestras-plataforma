@@ -14,7 +14,7 @@
    1. Entrar a Mercado Pago → Tu negocio → Cobrar → Link de pago.
    2. Poner el nombre del plan y el precio exacto (usar el "precio real",
       no el tachado).
-   3. Copiar el link y pegarlo acá abajo, en el plan que corresponda. */
+   3. Copiar el link y pegarlo aquí abajo, en el plan que corresponda. */
 
 export const PLANES = [
   {
