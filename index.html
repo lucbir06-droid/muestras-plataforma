@@ -80,11 +80,41 @@
   .pillar b{display:block;font-family:var(--display);color:var(--ink);font-size:.94rem;margin-bottom:8px;text-transform:uppercase;letter-spacing:.01em;}
   .pillar p{font-size:.85rem;color:var(--muted);}
 
-  .locations{display:grid;gap:14px;grid-template-columns:repeat(4,1fr);}
-  @media (max-width:760px){.locations{grid-template-columns:1fr 1fr;}}
+  .locations{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
+  @media (max-width:520px){.locations{grid-template-columns:1fr 1fr;}}
   .loc{text-align:center;padding:22px 14px;}
   .loc b{display:block;font-family:var(--display);font-size:1.05rem;color:var(--ink);letter-spacing:.02em;}
   .loc span{font-size:.76rem;color:var(--muted);}
+
+  .planes-grid{display:grid;gap:18px;grid-template-columns:repeat(3,1fr);align-items:stretch;}
+  @media (max-width:900px){.planes-grid{grid-template-columns:1fr;max-width:440px;margin:0 auto;}}
+  .plan-card{display:flex;flex-direction:column;gap:18px;position:relative;}
+  .plan-card.destacado{border-color:var(--accent-line);background:linear-gradient(180deg,var(--surface-2),var(--surface));}
+  .plan-card .plan-tag{
+    position:absolute;top:-11px;left:20px;background:var(--accent);color:var(--on-accent);
+    font-family:var(--display);font-weight:700;font-size:.64rem;letter-spacing:.06em;text-transform:uppercase;
+    padding:4px 10px;border-radius:999px;
+  }
+  .plan-card h3{font-size:1.1rem;}
+  .plan-card .plan-detalle{font-size:.78rem;color:var(--muted);margin-top:3px;}
+  .plan-dur{border-top:1px solid var(--line-soft);padding-top:14px;}
+  .plan-dur:first-of-type{border-top:0;padding-top:0;}
+  .plan-dur .dur-label{
+    font-family:var(--display);font-size:.68rem;font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--accent-2);margin-bottom:6px;
+  }
+  .plan-dur .precios{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;}
+  .plan-dur .tachado{font-size:.86rem;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--crit);}
+  .plan-dur .real{font-family:var(--display);font-weight:700;font-size:1.3rem;color:var(--ink);}
+  .plan-dur .btn{margin-top:10px;width:100%;}
+
+  .personalizado{
+    margin-top:34px;padding:26px 24px;border-radius:var(--radius);
+    border:1px dashed var(--line);display:flex;align-items:center;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;
+  }
+  .personalizado h3{font-size:1.02rem;}
+  .personalizado p{font-size:.86rem;color:var(--muted);margin-top:6px;max-width:48ch;}
 
   .cta-final{
     text-align:center;padding:64px 0;position:relative;overflow:hidden;
@@ -119,6 +149,7 @@
         <a href="#historia">Historia</a>
         <a href="#entrenadores">Entrenadores</a>
         <a href="#metodologia">Metodología</a>
+        <a href="#planes">Planes</a>
         <a href="#sedes">Sedes</a>
       </div>
       <a class="btn btn-primary btn-sm" href="app/#/clases-prueba">Reservar clase de prueba</a>
@@ -153,10 +184,13 @@
           <a class="btn btn-primary" href="app/#/clases-prueba">Reservar clase de prueba</a>
           <a class="btn btn-ghost" href="#historia">Conocer la historia</a>
         </div>
+        <div class="hero-ctas" style="margin-top:12px;">
+          <a class="btn btn-primary" style="background:var(--ink);color:var(--bg);" href="#planes">Inscribirme ahora</a>
+        </div>
         <dl class="hero-contact">
           <div><dt>Teléfono</dt><dd>+52 722 240 4771</dd></div>
           <div><dt>Instagram</dt><dd>@millanacademy</dd></div>
-          <div><dt>Sedes</dt><dd>CDMX · Metepec · Miami · LA</dd></div>
+          <div><dt>Sedes</dt><dd>Polanco · Metepec · Miami · LA · NY · París</dd></div>
         </dl>
       </div>
       <div class="hero-emblem">
@@ -278,17 +312,37 @@
     </div>
   </section>
 
+  <section id="planes">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Planes y precios</span>
+        <h2>Elegí tu sede y tu duración</h2>
+      </div>
+      <div class="planes-grid" id="planesGrid"><!-- inyectado por planes.js --></div>
+      <div class="personalizado">
+        <div>
+          <h3>¿Buscás algo distinto?</h3>
+          <p>Grupos, temporadas cortas o convenios con equipos — armamos un plan a medida.</p>
+        </div>
+        <a class="btn btn-ghost" href="mailto:millanacademymx@gmail.com?subject=Plan%20personalizado%20-%20Mill%C3%A1n%20Academy">Contactar para plan personalizado</a>
+      </div>
+    </div>
+  </section>
+
   <section id="sedes">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">Dónde entrenamos</span>
-        <h2>Presencia en México y Estados Unidos</h2>
+        <h2>Presencia en México, Estados Unidos y Europa</h2>
       </div>
       <div class="locations">
-        <div class="card loc"><b>CDMX</b><span>México</span></div>
+        <div class="card loc"><b>Polanco</b><span>México</span></div>
         <div class="card loc"><b>Metepec</b><span>México</span></div>
         <div class="card loc"><b>Miami</b><span>Estados Unidos</span></div>
         <div class="card loc"><b>LA</b><span>Estados Unidos</span></div>
+        <div class="card loc"><b>Nueva York</b><span>Estados Unidos</span></div>
+        <div class="card loc"><b>París</b><span>Francia</span></div>
+        <div class="card loc"><b>A domicilio</b><span>Vamos donde estés</span></div>
       </div>
     </div>
   </section>
@@ -310,6 +364,7 @@
       <p>No esperes a que lo descubran — ayudale a construir su camino desde hoy.</p>
       <div class="hero-ctas">
         <a class="btn btn-primary" href="app/#/clases-prueba">Reservar clase de prueba</a>
+        <a class="btn btn-ghost" href="#planes">Inscribirme ahora</a>
       </div>
     </div>
   </section>
@@ -326,16 +381,47 @@
         <a href="#historia">Historia</a>
         <a href="#entrenadores">Entrenadores</a>
         <a href="#metodologia">Metodología</a>
+        <a href="#planes">Planes</a>
         <a href="#sedes">Sedes</a>
         <a href="app/">Acceso equipo</a>
       </div>
     </div>
     <div class="foot-bottom">
-      <span>CDMX · Metepec · Miami · LA — +52 722 240 4771</span>
+      <span>Polanco · Metepec · Miami · LA · NY · París — +52 722 240 4771 — millanacademymx@gmail.com</span>
       <span>@millanacademy · @talamillans · @lmillans</span>
     </div>
   </div>
 </footer>
+
+<script type="module">
+  import { PLANES, fmtMXN } from "./assets/js/planes.js";
+
+  function planCard(plan) {
+    return `
+      <div class="card plan-card${plan.destacado ? " destacado" : ""}">
+        ${plan.destacado ? `<span class="plan-tag">Más elegido</span>` : ""}
+        <div>
+          <h3>${plan.nombre}</h3>
+          ${plan.detalle ? `<div class="plan-detalle">${plan.detalle}</div>` : ""}
+        </div>
+        ${plan.duraciones.map((d) => `
+          <div class="plan-dur">
+            <div class="dur-label">${d.label}</div>
+            <div class="precios">
+              <span class="tachado">${fmtMXN(d.tachado)}</span>
+              <span class="real">${fmtMXN(d.real)}</span>
+            </div>
+            <a class="btn ${plan.destacado ? "btn-primary" : "btn-ghost"} btn-sm dur-cta"
+               href="${d.linkPago ? d.linkPago : `app/#/inscribirse?plan=${plan.id}&dur=${d.id}`}">
+              Elegir plan
+            </a>
+          </div>
+        `).join("")}
+      </div>`;
+  }
+
+  document.getElementById("planesGrid").innerHTML = PLANES.map(planCard).join("");
+</script>
 
 </body>
 </html>

@@ -1,5 +1,6 @@
 import { Store } from "./store.js";
 import { WEB3FORMS_ACCESS_KEY } from "./config.js";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js";
 
 /* =========================================================
    Millán Academy — panel interno
@@ -17,8 +18,12 @@ const NAV = [
   { path: "/alumnos", label: "Alumnos", icon: "i-users" },
   { path: "/agenda", label: "Agenda", icon: "i-calendar" },
   { path: "/clases-prueba", label: "Clases de prueba", icon: "i-play", countKey: "solicitudesPendientes" },
+  { path: "/inscribirse", label: "Inscripciones", icon: "i-check", countKey: "inscripcionesPendientes" },
+  { path: "/profes", label: "Objetivos de profes", icon: "i-target" },
   { path: "/reportes", label: "Reportes", icon: "i-chart" },
   { path: "/pagos", label: "Pagos", icon: "i-card", countKey: "pagosPendientes" },
+  { path: "/duenos", label: "Dueños", icon: "i-shield" },
+  { path: "/chat", label: "Chat", icon: "i-chat" },
 ];
 
 const TIPOS_SESION = ["Entrenamiento individual", "Análisis de video", "Preparación física", "Clase de prueba", "Diagnóstico"];
@@ -117,12 +122,24 @@ function render() {
   } else if (path === "/clases-prueba") {
     title = "Clases de prueba";
     html = ClasesPrueba();
+  } else if (path.startsWith("/inscribirse")) {
+    title = "Inscripciones";
+    html = Inscribirse(path);
+  } else if (path === "/profes") {
+    title = "Objetivos de profes";
+    html = Profes();
   } else if (path === "/reportes") {
     title = "Reportes";
     html = Reportes();
   } else if (path === "/pagos") {
     title = "Pagos";
     html = Pagos();
+  } else if (path === "/duenos") {
+    title = "Panel de dueños";
+    html = Duenos();
+  } else if (path === "/chat") {
+    title = "Chat";
+    html = Chat();
   } else {
     title = "No encontrado";
     html = `<div class="empty">No encontramos esa página. <a href="#/" style="color:var(--accent-2)">Volver al panel</a>.</div>`;
@@ -138,9 +155,10 @@ function renderNav(path) {
     solicitudesPendientes: Store.solicitudes().filter((s) => s.estado === "pendiente").length,
     pagosPendientes: Store.pagos().filter((p) => p.estado === "pendiente").length,
     checkinsError: Store.checkins().filter((c) => c.estado === "error").length,
+    inscripcionesPendientes: Store.inscripciones().filter((i) => i.estado === "pendiente de pago").length,
   };
   sidenav.innerHTML = NAV.map((item) => {
-    const on = path === item.path || (item.path === "/alumnos" && path.startsWith("/alumnos/"));
+    const on = path === item.path || path.startsWith(item.path + "/") || (item.path === "/inscribirse" && path.startsWith("/inscribirse"));
     const count = item.countKey ? counts[item.countKey] : 0;
     return `<a href="#${item.path}" class="${on ? "on" : ""}">${icon(item.icon)}<span>${item.label}</span>${count ? `<span class="badge-count">${count}</span>` : ""}</a>`;
   }).join("");
@@ -387,6 +405,28 @@ function AlumnosList() {
               <select name="coach">${Store.COACHES.map((c) => `<option>${c}</option>`).join("")}</select>
             </div>
           </div>
+          <div class="field-row">
+            <div class="field"><label>Teléfono (alumno o papá/mamá)</label><input name="telefono" placeholder="+52 55 0000 0000" /></div>
+            <div class="field"><label>Correo (alumno o papá/mamá)</label><input name="correo" type="email" placeholder="correo@ejemplo.com" /></div>
+          </div>
+          <div class="field"><label>Talla de playera</label>
+            <select name="tallaPlayera">${Store.TALLAS.map((t) => `<option>${t}</option>`).join("")}</select>
+          </div>
+          <div class="field">
+            <label>Método de alta</label>
+            <select name="metodoAlta" onchange="this.closest('form').querySelector('.pago-extra').hidden = (this.value !== 'Transferencia')">
+              <option value="">Sin pago registrado (paga después por Mercado Pago)</option>
+              <option value="Transferencia">Ya pagó por transferencia — activar cuenta</option>
+            </select>
+          </div>
+          <div class="field-row pago-extra" hidden>
+            <div class="field"><label>Periodicidad</label>
+              <select name="periodicidad"><option value="mensual">Mensual</option><option value="anual">Anual</option></select>
+            </div>
+            <div class="field"><label>Monto recibido</label>
+              <input name="monto" type="number" min="0" step="0.01" placeholder="0.00" />
+            </div>
+          </div>
           <button class="btn btn-primary btn-sm" type="submit">Agregar alumno</button>
         </form>
       </details>
@@ -417,6 +457,8 @@ function AlumnoDetail(id) {
       <div style="flex:1;min-width:200px;">
         <div class="row-title" style="font-size:1.1rem;">${esc(a.nombre)}</div>
         <div class="row-sub">${esc(a.categoria)} · ${esc(a.sede)} · coach ${esc(a.coach)} · alta hace ${daysAgo(a.alta)} días</div>
+        ${a.telefono || a.correo ? `<div class="row-sub" style="margin-top:4px;">${[a.telefono, a.correo].filter(Boolean).map(esc).join(" · ")}</div>` : ""}
+        ${a.tallaPlayera ? `<div class="row-sub">Playera: ${esc(a.tallaPlayera)}</div>` : ""}
       </div>
       ${badge(a.moneda, "muted")}
     </div>
@@ -438,6 +480,30 @@ function AlumnoDetail(id) {
             </div>`).join("")}
         </div>
       </div>` : ""}
+
+    <div class="block">
+      <div class="block-head"><h3>Ficha del jugador</h3></div>
+      <form class="card" data-action="update-evaluacion" data-alumno="${a.id}">
+        <div class="field-row" style="grid-template-columns:1fr 1fr 1fr;">
+          <div class="field"><label>Táctica — ${a.evaluacion?.tactica ?? 0}%</label>
+            <input type="range" min="0" max="100" name="tactica" value="${a.evaluacion?.tactica ?? 0}"
+              oninput="this.previousElementSibling.textContent = this.previousElementSibling.textContent.replace(/—.*/, '— ' + this.value + '%')" />
+          </div>
+          <div class="field"><label>Técnica — ${a.evaluacion?.tecnica ?? 0}%</label>
+            <input type="range" min="0" max="100" name="tecnica" value="${a.evaluacion?.tecnica ?? 0}"
+              oninput="this.previousElementSibling.textContent = this.previousElementSibling.textContent.replace(/—.*/, '— ' + this.value + '%')" />
+          </div>
+          <div class="field"><label>Físico — ${a.evaluacion?.fisico ?? 0}%</label>
+            <input type="range" min="0" max="100" name="fisico" value="${a.evaluacion?.fisico ?? 0}"
+              oninput="this.previousElementSibling.textContent = this.previousElementSibling.textContent.replace(/—.*/, '— ' + this.value + '%')" />
+          </div>
+        </div>
+        <div class="field"><label>Comentarios</label>
+          <textarea name="comentarios" placeholder="Impresión general del jugador...">${esc(a.evaluacion?.comentarios || "")}</textarea>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">Guardar ficha</button>
+      </form>
+    </div>
 
     <div class="block">
       <div class="block-head"><h3>Registrar sesión</h3></div>
@@ -484,6 +550,16 @@ function Agenda() {
 
   return `
     <div class="block">
+      <form class="card" data-action="generar-horarios" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
+        <div class="field" style="margin:0;min-width:180px;">
+          <label>Generar horarios fijos</label>
+          <select name="sede">${Store.SEDES.map((s) => `<option>${s}</option>`).join("")}</select>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">${icon("i-calendar")} Martes/miércoles/viernes 7–10pm</button>
+      </form>
+      <p style="font-size:.76rem;color:var(--muted);margin:-6px 0 14px;">
+        Crea huecos disponibles para los próximos martes, miércoles y viernes a las 19:00, 20:00, 21:00 y 22:00 en la sede elegida.
+      </p>
       <details class="card panel">
         <summary style="cursor:pointer;font-family:var(--display);font-weight:600;font-size:.85rem;letter-spacing:.02em;text-transform:uppercase;color:var(--ink);">
           + Abrir hueco disponible
@@ -553,11 +629,14 @@ function ClasesPrueba() {
           <div class="field"><label>Edad</label><input name="edad" type="number" min="4" max="23" required /></div>
         </div>
         <div class="field-row">
+          <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
           <div class="field"><label>País</label><input name="pais" required placeholder="México" /></div>
-          <div class="field"><label>Zona horaria</label><input name="zona" required placeholder="GMT-6" /></div>
         </div>
-        <div class="field"><label>Sede de interés</label>
-          <select name="sede">${SEDES_AGENDA.map((s) => `<option>${s}</option>`).join("")}</select>
+        <div class="field-row">
+          <div class="field"><label>Zona horaria</label><input name="zona" required placeholder="GMT-6" /></div>
+          <div class="field"><label>Sede de interés</label>
+            <select name="sede">${SEDES_AGENDA.map((s) => `<option>${s}</option>`).join("")}</select>
+          </div>
         </div>
         <div class="field"><label>Mensaje</label><textarea name="mensaje" placeholder="Categoría, disponibilidad, algo que debamos saber..."></textarea></div>
         <button class="btn btn-primary btn-sm" type="submit">Enviar solicitud</button>
@@ -578,7 +657,7 @@ function solicitudFull(s) {
     <div class="row-card">
       <div class="grow">
         <div class="row-title">${esc(s.nombre)} · ${s.edad} años · ${esc(s.sede)}</div>
-        <div class="row-sub">${esc(s.pais)} (${esc(s.zona)}) · ${fmtDate(s.fecha)}</div>
+        <div class="row-sub">${esc(s.telefono || "sin teléfono")} · ${esc(s.pais)} (${esc(s.zona)}) · ${fmtDate(s.fecha)}</div>
         ${s.mensaje ? `<div class="row-sub" style="margin-top:6px;color:var(--ink-soft);">"${esc(s.mensaje)}"</div>` : ""}
       </div>
       ${s.estado === "pendiente" ? `
@@ -594,24 +673,25 @@ function Reportes() {
   const alumnos = Store.alumnos();
   return `
     <div class="list">
-      ${alumnos.map((a) => `
+      ${alumnos.map((a) => {
+        const ev = a.evaluacion || { tactica: 0, tecnica: 0, fisico: 0 };
+        return `
         <a class="card row-card" href="#/alumnos/${a.id}" style="align-items:flex-start;">
           <div class="avatar-sm">${esc(a.avatar || "")}</div>
           <div class="grow">
             <div class="row-title">${esc(a.nombre)} <span style="color:var(--muted);font-weight:500;">· ${esc(a.categoria)} · ${esc(a.sede)}</span></div>
             <div style="margin-top:10px;display:grid;gap:8px;max-width:420px;">
-              ${(a.objetivos || []).slice(0, 2).map((o) => `
-                <div class="goal" style="margin:0;">
-                  <div class="rowline"><span>${esc(o.titulo)}</span><em>${o.avance}%</em></div>
-                  <div class="track"><div class="fill" style="width:${o.avance}%"></div></div>
-                </div>`).join("")}
+              <div class="goal" style="margin:0;"><div class="rowline"><span>Táctica</span><em>${ev.tactica}%</em></div><div class="track"><div class="fill" style="width:${ev.tactica}%"></div></div></div>
+              <div class="goal" style="margin:0;"><div class="rowline"><span>Técnica</span><em>${ev.tecnica}%</em></div><div class="track"><div class="fill" style="width:${ev.tecnica}%"></div></div></div>
+              <div class="goal" style="margin:0;"><div class="rowline"><span>Físico</span><em>${ev.fisico}%</em></div><div class="track"><div class="fill" style="width:${ev.fisico}%"></div></div></div>
             </div>
           </div>
           <div style="text-align:right;">
             <div class="row-title tabular">${avgAvance(a)}%</div>
-            <div class="row-sub">avance promedio</div>
+            <div class="row-sub">avance de objetivos</div>
           </div>
-        </a>`).join("")}
+        </a>`;
+      }).join("")}
     </div>
   `;
 }
@@ -708,6 +788,228 @@ function Pagos() {
   `;
 }
 
+function planDurOptions(selectedPlan, selectedDur) {
+  const opts = [];
+  for (const plan of PLANES) {
+    for (const dur of plan.duraciones) {
+      const sel = plan.id === selectedPlan && dur.id === selectedDur ? "selected" : "";
+      opts.push(`<option value="${plan.id}:${dur.id}" ${sel}>${esc(plan.nombre)} · ${esc(dur.label)} · ${fmtMXN(dur.real)}</option>`);
+    }
+  }
+  return opts.join("");
+}
+
+function Inscribirse(path) {
+  const query = path.includes("?") ? path.split("?")[1] : "";
+  const params = new URLSearchParams(query);
+  const found = encontrarDuracion(params.get("plan"), params.get("dur"));
+  const inscripciones = Store.inscripciones();
+
+  return `
+    <div class="block">
+      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
+        Este es el formulario que ve la familia al tocar "Inscribirme" en el sitio. Si el
+        plan ya tiene un link de pago de Mercado Pago conectado (en <code>assets/js/planes.js</code>),
+        el botón de la página principal manda directo a pagar; si no, queda como solicitud
+        acá para que Millán la cobre y active la cuenta manualmente.
+      </p>
+      ${found ? `<div class="mp-note" style="margin-bottom:16px;">Plan preseleccionado: <b>${esc(found.plan.nombre)} · ${esc(found.dur.label)}</b> — ${fmtMXN(found.dur.real)}</div>` : ""}
+      <form class="card" data-action="inscribirse" style="max-width:460px;">
+        <div class="field"><label>Nombre del jugador</label><input name="nombre" required placeholder="Nombre y apellido" /></div>
+        <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
+        <div class="field"><label>Plan</label>
+          <select name="planDur">${planDurOptions(params.get("plan"), params.get("dur"))}</select>
+        </div>
+        <div class="field"><label>Talla de playera</label>
+          <select name="tallaPlayera">${Store.TALLAS.map((t) => `<option>${t}</option>`).join("")}</select>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">Enviar inscripción</button>
+      </form>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Inscripciones recibidas</h3></div>
+      <div class="list">
+        ${inscripciones.length ? inscripciones.map(inscripcionRow).join("") : `<div class="empty">Todavía no hay inscripciones.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function inscripcionRow(i) {
+  return `
+    <div class="row-card">
+      <div class="grow">
+        <div class="row-title">${esc(i.nombre)} · ${esc(i.planNombre)} · ${esc(i.duracionLabel)}</div>
+        <div class="row-sub">${esc(i.telefono)} · talla ${esc(i.tallaPlayera)} · ${fmtMoney(i.monto, i.moneda)} · ${fmtDate(i.fecha)}</div>
+      </div>
+      ${i.estado === "pendiente de pago"
+        ? `<button class="btn btn-primary btn-sm" data-action="inscripcion-estado" data-id="${i.id}" data-estado="activada">Marcar pagada y activar</button>`
+        : badge("Activada", "ok")}
+    </div>`;
+}
+
+function Profes() {
+  const objetivos = Store.objetivosCategoria();
+  return `
+    <div class="block">
+      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
+        Lo que cada categoría está trabajando esta semana — lo ven los profes y también
+        los alumnos y sus familias.
+      </p>
+      <form class="card" data-action="add-objetivo-categoria">
+        <div class="field-row">
+          <div class="field"><label>Categoría</label>
+            <select name="categoria">${Store.CATEGORIAS.map((c) => `<option>${c}</option>`).join("")}</select>
+          </div>
+          <div class="field"><label>Profe</label>
+            <select name="profe">${Store.COACHES.map((c) => `<option>${c}</option>`).join("")}</select>
+          </div>
+        </div>
+        <div class="field"><label>Título</label><input name="titulo" required placeholder="Ej. Juego aéreo bajo presión" /></div>
+        <div class="field"><label>Detalle</label><textarea name="detalle" placeholder="En qué consiste, qué se busca lograr..."></textarea></div>
+        <button class="btn btn-primary btn-sm" type="submit">Publicar objetivo</button>
+      </form>
+    </div>
+
+    ${Store.CATEGORIAS.map((cat) => {
+      const items = objetivos.filter((o) => o.categoria === cat);
+      return `
+      <div class="block">
+        <div class="block-head"><h3>${esc(cat)}</h3></div>
+        <div class="list">
+          ${items.length ? items.map((o) => `
+            <div class="row-card">
+              <div class="grow">
+                <div class="row-title">${esc(o.titulo)}</div>
+                ${o.detalle ? `<div class="row-sub" style="margin-top:4px;">${esc(o.detalle)}</div>` : ""}
+                <div class="row-sub" style="margin-top:4px;">${esc(o.profe)} · ${fmtDate(o.fecha)}</div>
+              </div>
+            </div>`).join("") : `<div class="empty">Sin objetivos publicados todavía.</div>`}
+        </div>
+      </div>`;
+    }).join("")}
+  `;
+}
+
+function Duenos() {
+  const alumnos = Store.alumnos();
+  const pagos = Store.pagos();
+  const ingresosMXN = pagos.filter((p) => p.estado === "pagado" && p.moneda === "MXN").reduce((s, p) => s + p.monto, 0);
+  const ingresosUSD = pagos.filter((p) => p.estado === "pagado" && p.moneda === "USD").reduce((s, p) => s + p.monto, 0);
+  const pendientes = pagos.filter((p) => p.estado === "pendiente");
+  const totalPendienteMXN = pendientes.filter((p) => p.moneda === "MXN").reduce((s, p) => s + p.monto, 0);
+  const nuevosDelMes = alumnos.filter((a) => daysAgo(a.alta) <= 30).length;
+
+  const mensualesMXN = pagos.filter((p) => p.moneda === "MXN" && p.periodicidad === "mensual" && p.estado === "pagado");
+  const promedioMensual = mensualesMXN.length ? Math.round(mensualesMXN.reduce((s, p) => s + p.monto, 0) / mensualesMXN.length) : 3349;
+  const costosFijos = Store.config().costosFijosMXN;
+  const puntoEquilibrio = promedioMensual > 0 ? Math.ceil(costosFijos / promedioMensual) : 0;
+  const faltan = Math.max(0, puntoEquilibrio - alumnos.length);
+
+  return `
+    <div class="mp-note" style="margin-bottom:22px;">
+      <b>Sección solo para dueños.</b> Todavía no hay login real — cualquiera que entre al panel
+      puede ver esto. Se restringe cuando conectemos el login (ver el README, sección Supabase).
+    </div>
+
+    <div class="stats">
+      <div class="card stat"><span class="n">${fmtMoney(ingresosMXN, "MXN")}</span><span class="l">Cobrado (MXN)</span></div>
+      <div class="card stat"><span class="n">${fmtMoney(ingresosUSD, "USD")}</span><span class="l">Cobrado (USD)</span></div>
+      <div class="card stat"><span class="n">${fmtMoney(totalPendienteMXN, "MXN")}</span><span class="l">Por cobrar (MXN)</span></div>
+      <div class="card stat"><span class="n">${nuevosDelMes}</span><span class="l">Alumnos nuevos (30 días)</span></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Estado de resultados</h3></div>
+      <div class="card">
+        <p style="font-size:.9rem;color:var(--ink-soft);">
+          Este mes se sumaron <b>${nuevosDelMes} alumnos</b> nuevos. Tenés <b>${alumnos.length}</b>
+          alumnos activos en total, con <b>${fmtMoney(ingresosMXN, "MXN")}</b> y
+          <b>${fmtMoney(ingresosUSD, "USD")}</b> cobrados hasta ahora.
+        </p>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Punto de equilibrio</h3></div>
+      <form class="card" data-action="set-costos-fijos" style="max-width:420px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-end;">
+        <div class="field" style="margin:0;flex:1;"><label>Costos fijos mensuales (MXN)</label>
+          <input name="costos" type="number" min="0" step="100" value="${costosFijos}" />
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
+      </form>
+      <div class="card">
+        <p style="font-size:.9rem;color:var(--ink-soft);">
+          Con un plan mensual promedio de <b>${fmtMoney(promedioMensual, "MXN")}</b>, hacen falta
+          <b>${puntoEquilibrio} alumnos</b> pagando para cubrir esos costos fijos. Hoy tenés
+          <b>${alumnos.length}</b>${faltan > 0 ? ` — faltan <b>${faltan}</b> para llegar al punto de equilibrio.` : ", ya lo superaste."}
+        </p>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Alumnos con pagos pendientes</h3></div>
+      <div class="list">
+        ${pendientes.length ? pendientes.map((p) => {
+          const a = p.alumnoId ? Store.alumno(p.alumnoId) : null;
+          return `
+          <div class="row-card">
+            <div class="grow">
+              <div class="row-title">${a ? esc(a.nombre) : "—"}</div>
+              <div class="row-sub">${esc(p.concepto)} · ${fmtMoney(p.monto, p.moneda)}</div>
+            </div>
+            ${badge("Pendiente", "warn")}
+          </div>`;
+        }).join("") : `<div class="empty">No hay pagos pendientes.</div>`}
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Todos los alumnos</h3></div>
+      <div class="card scrollx">
+        <table class="tbl">
+          <thead><tr><th>Nombre</th><th>Categoría</th><th>Sede</th><th>Contacto</th><th></th></tr></thead>
+          <tbody>
+            ${alumnos.map((a) => `
+              <tr>
+                <td><a class="rowlink" href="#/alumnos/${a.id}">${esc(a.nombre)}</a></td>
+                <td>${esc(a.categoria)}</td>
+                <td>${esc(a.sede)}</td>
+                <td>${esc(a.telefono || "—")}</td>
+                <td><button class="btn btn-ghost btn-sm" data-action="eliminar-alumno" data-id="${a.id}" data-nombre="${esc(a.nombre)}">Eliminar</button></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function Chat() {
+  return `
+    <div class="mp-note" style="margin-bottom:22px;">
+      <b>Vista previa — todavía no envía mensajes de verdad.</b> El chat en vivo (canales por
+      categoría + mensajes directos a un profe) necesita Supabase conectado para que los
+      mensajes se vean entre distintos celulares en tiempo real. Así se va a ver una vez armado:
+    </div>
+    <div class="stats">
+      ${Store.CATEGORIAS.map((c) => `
+        <div class="card stat" style="text-align:left;">
+          <span class="l">${icon("i-chat")} Canal de categoría</span>
+          <span class="n" style="font-size:1.05rem;margin-top:6px;">${esc(c)}</span>
+        </div>`).join("")}
+    </div>
+    <div class="block">
+      <div class="block-head"><h3>Mensajes directos</h3></div>
+      <p style="font-size:.86rem;color:var(--muted);max-width:60ch;">
+        Además de los 4 canales por categoría, cada alumno o papá va a poder mandarle un
+        mensaje privado a un profe en particular, visible solo para ese profe y el dueño.
+      </p>
+    </div>
+  `;
+}
+
 /* ---------------- actions (delegated) ---------------- */
 view.addEventListener("submit", (e) => {
   const form = e.target.closest("form[data-action]");
@@ -721,12 +1023,32 @@ view.addEventListener("submit", (e) => {
   const data = Object.fromEntries(new FormData(form).entries());
 
   if (action === "add-alumno") {
-    const a = Store.addAlumno({ nombre: data.nombre.trim(), categoria: data.categoria, sede: data.sede, coach: data.coach, moneda: data.sede === "Miami" || data.sede === "LA" ? "USD" : "MXN" });
-    toast(`${a.nombre} agregado`);
+    const moneda = ["Miami", "LA", "Nueva York"].includes(data.sede) ? "USD" : (data.sede === "París" ? "EUR" : "MXN");
+    const a = Store.addAlumno({
+      nombre: data.nombre.trim(), categoria: data.categoria, sede: data.sede, coach: data.coach, moneda,
+      telefono: data.telefono?.trim() || "", correo: data.correo?.trim() || "", tallaPlayera: data.tallaPlayera,
+    });
+    if (data.metodoAlta === "Transferencia" && Number(data.monto) > 0) {
+      Store.addPago({
+        alumnoId: a.id, concepto: `Alta manual · plan ${data.periodicidad}`, metodo: "Transferencia",
+        monto: Number(data.monto), moneda, periodicidad: data.periodicidad, estado: "pagado",
+      });
+      toast(`${a.nombre} agregado y activado (pago por transferencia registrado)`);
+    } else {
+      toast(`${a.nombre} agregado`);
+    }
   } else if (action === "add-bitacora") {
     const alumnoId = form.dataset.alumno;
     Store.addBitacora({ alumnoId, tipo: data.tipo, nota: data.nota.trim(), fecha: new Date(data.fecha || Date.now()).toISOString() });
     toast("Sesión registrada en la bitácora");
+  } else if (action === "update-evaluacion") {
+    Store.actualizarEvaluacion(form.dataset.alumno, {
+      tactica: Number(data.tactica), tecnica: Number(data.tecnica), fisico: Number(data.fisico), comentarios: data.comentarios.trim(),
+    });
+    toast("Ficha actualizada");
+  } else if (action === "generar-horarios") {
+    const n = Store.generarHorariosSemana(data.sede, 2);
+    toast(n > 0 ? `${n} horarios creados en ${data.sede}` : "Esos horarios ya estaban cargados");
   } else if (action === "add-slot") {
     const tipoInfo = TIPOS_SLOT.find((t) => t.tipo === data.tipo);
     Store.addReserva({ alumnoId: null, fecha: new Date(data.fecha).toISOString(), hora: data.hora, tipo: data.tipo, duracion: tipoInfo?.duracion || 60, sede: data.sede, estado: "disponible" });
@@ -736,21 +1058,52 @@ view.addEventListener("submit", (e) => {
     Store.reservar(form.dataset.id, data.alumnoId);
     toast("Sesión reservada");
   } else if (action === "add-solicitud") {
-    Store.addSolicitud({ nombre: data.nombre.trim(), edad: Number(data.edad), pais: data.pais.trim(), zona: data.zona.trim(), sede: data.sede, mensaje: data.mensaje?.trim() || "" });
+    Store.addSolicitud({ nombre: data.nombre.trim(), edad: Number(data.edad), telefono: data.telefono.trim(), pais: data.pais.trim(), zona: data.zona.trim(), sede: data.sede, mensaje: data.mensaje?.trim() || "" });
     toast("Solicitud enviada");
   } else if (action === "add-pago") {
     Store.addPago({ alumnoId: data.alumnoId, concepto: data.concepto.trim(), metodo: data.metodo, moneda: data.moneda, monto: Number(data.monto), estado: data.estado });
     toast("Pago registrado");
+  } else if (action === "inscribirse") {
+    const [planId, durId] = data.planDur.split(":");
+    const found = encontrarDuracion(planId, durId);
+    Store.addInscripcion({
+      nombre: data.nombre.trim(), telefono: data.telefono.trim(), tallaPlayera: data.tallaPlayera,
+      planId, duracionId: durId, planNombre: found?.plan.nombre || planId, duracionLabel: found?.dur.label || durId,
+      monto: found?.dur.real || 0, moneda: found?.plan.moneda || "MXN",
+    });
+    toast("Inscripción enviada — Millán te contacta para confirmar el pago");
+  } else if (action === "add-objetivo-categoria") {
+    Store.addObjetivoCategoria({ categoria: data.categoria, profe: data.profe, titulo: data.titulo.trim(), detalle: data.detalle?.trim() || "" });
+    toast("Objetivo publicado");
+  } else if (action === "set-costos-fijos") {
+    Store.setCostosFijos(Number(data.costos) || 0);
+    toast("Costos fijos actualizados");
   }
   render();
 });
 
 view.addEventListener("click", (e) => {
-  const btn = e.target.closest("[data-action='solicitud-estado']");
-  if (!btn) return;
-  Store.actualizarSolicitud(btn.dataset.id, btn.dataset.estado);
-  toast(btn.dataset.estado === "confirmada" ? "Solicitud confirmada" : "Solicitud rechazada");
-  render();
+  const solicitudBtn = e.target.closest("[data-action='solicitud-estado']");
+  if (solicitudBtn) {
+    Store.actualizarSolicitud(solicitudBtn.dataset.id, solicitudBtn.dataset.estado);
+    toast(solicitudBtn.dataset.estado === "confirmada" ? "Solicitud confirmada" : "Solicitud rechazada");
+    render();
+    return;
+  }
+  const inscripcionBtn = e.target.closest("[data-action='inscripcion-estado']");
+  if (inscripcionBtn) {
+    Store.actualizarInscripcion(inscripcionBtn.dataset.id, inscripcionBtn.dataset.estado);
+    toast("Inscripción activada");
+    render();
+    return;
+  }
+  const eliminarBtn = e.target.closest("[data-action='eliminar-alumno']");
+  if (eliminarBtn) {
+    if (!confirm(`Esto borra a ${eliminarBtn.dataset.nombre} y no se puede deshacer. ¿Seguro?`)) return;
+    Store.eliminarAlumno(eliminarBtn.dataset.id);
+    toast(`${eliminarBtn.dataset.nombre} eliminado`);
+    render();
+  }
 });
 
 document.getElementById("resetDemo").addEventListener("click", () => {

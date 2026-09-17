@@ -145,6 +145,7 @@ input,textarea,select{
   padding:11px 12px;
 }
 textarea{resize:vertical;min-height:84px;}
+input[type="range"]{padding:0;background:none;border:0;accent-color:var(--accent);}
 input::placeholder,textarea::placeholder{color:var(--muted);}
 .field{margin-bottom:16px;}
 .field-row{display:grid;gap:14px;grid-template-columns:1fr 1fr;}
