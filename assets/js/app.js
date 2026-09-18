@@ -29,7 +29,7 @@ const NAV = [
   { path: "/profes", label: "Objetivos de profes", icon: "i-target" },
   { path: "/reportes", label: "Reportes", icon: "i-chart" },
   { path: "/pagos", label: "Pagos", icon: "i-card", countKey: "pagosPendientes" },
-  { path: "/duenos", label: "Dueños", icon: "i-shield" },
+  { path: "/duenos", label: "Dueños", icon: "i-shield", soloDueno: true },
   { path: "/chat", label: "Chat", icon: "i-chat" },
 ];
 
@@ -145,8 +145,13 @@ function render() {
     title = "Pagos";
     html = Pagos();
   } else if (path === "/duenos") {
-    title = "Panel de dueños";
-    html = Duenos();
+    if (perfil?.rol !== "dueño") {
+      title = "Acceso restringido";
+      html = `<div class="empty">Esta sección es solo para el dueño de la academia. Tu cuenta tiene rol "${esc(perfil?.rol || "sin definir")}". <a href="#/" style="color:var(--accent-2)">Volver al panel</a>.</div>`;
+    } else {
+      title = "Panel de dueños";
+      html = Duenos();
+    }
   } else if (path === "/chat") {
     title = "Chat";
     html = Chat();
@@ -167,15 +172,27 @@ function renderNav(path) {
     checkinsError: Store.checkins().filter((c) => c.estado === "error").length,
     inscripcionesPendientes: Store.inscripciones().filter((i) => i.estado === "pendiente de pago").length,
   };
-  sidenav.innerHTML = NAV.map((item) => {
-    const on = path === item.path || path.startsWith(item.path + "/") || (item.path === "/inscribirse" && path.startsWith("/inscribirse"));
-    const count = item.countKey ? counts[item.countKey] : 0;
-    return `<a href="#${item.path}" class="${on ? "on" : ""}">${icon(item.icon)}<span>${item.label}</span>${count ? `<span class="badge-count">${count}</span>` : ""}</a>`;
-  }).join("");
+  sidenav.innerHTML = NAV
+    .filter((item) => !item.soloDueno || perfil?.rol === "dueño")
+    .map((item) => {
+      const on = path === item.path || path.startsWith(item.path + "/") || (item.path === "/inscribirse" && path.startsWith("/inscribirse"));
+      const count = item.countKey ? counts[item.countKey] : 0;
+      return `<a href="#${item.path}" class="${on ? "on" : ""}">${icon(item.icon)}<span>${item.label}</span>${count ? `<span class="badge-count">${count}</span>` : ""}</a>`;
+    }).join("");
 }
 
 /* ---------------- login / registro / sesión ---------------- */
 let session = null;
+let perfil = null;
+
+// trae el perfil (y sobre todo el rol) de quien está logueado.
+// no vuelve a pedirlo si ya lo tenemos para esta misma sesión.
+async function cargarPerfil() {
+  if (!session) { perfil = null; return; }
+  if (perfil && perfil.id === session.user.id) return;
+  const { data } = await sb.from("perfiles").select("*").eq("id", session.user.id).maybeSingle();
+  perfil = data || { id: session.user.id, nombre: session.user.email, rol: "alumno" };
+}
 
 function AuthShell(mode, inner) {
   return `<div style="display:flex;align-items:center;justify-content:center;min-height:78vh;padding:20px 16px;box-sizing:border-box;">
@@ -209,6 +226,12 @@ function SignupView(errorMsg) {
       ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
       <form id="authForm">
         <div class="field"><label>Nombre completo</label><input name="nombre" required /></div>
+        <div class="field"><label>¿Cómo vas a usar la cuenta?</label>
+          <select name="rol">
+            <option value="alumno">Soy alumno o papá/mamá</option>
+            <option value="profe">Soy profe</option>
+          </select>
+        </div>
         <div class="field"><label>Correo</label><input name="email" type="email" required autocomplete="username" /></div>
         <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
         <div class="field"><label>País</label><input name="pais" required placeholder="México" /></div>
@@ -251,7 +274,7 @@ function wireAuthForms() {
       // ---- crear cuenta ----
       const { data, error } = await sb.auth.signUp({
         email, password,
-        options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim() } },
+        options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim(), rol: form.rol.value } },
       });
       if (error) {
         showSignup(error.message.includes("already registered") ? "Ese correo ya tiene una cuenta — inicia sesión." : error.message);
@@ -277,8 +300,11 @@ async function route() {
   const resetBtn = document.getElementById("resetDemo");
 
   if (!session && !esPublica) {
+    perfil = null;
     side.style.display = "none";
     resetBtn.style.display = "none";
+    const eyebrowOut = document.getElementById("topbarEyebrow");
+    if (eyebrowOut) eyebrowOut.textContent = "Panel interno · demo local";
     showLogin();
     return;
   }
@@ -287,6 +313,12 @@ async function route() {
   view.style.maxWidth = "";
   view.style.padding = "";
   await Store.ready;
+  await cargarPerfil();
+  const eyebrow = document.getElementById("topbarEyebrow");
+  if (eyebrow && perfil) {
+    const rolLabel = { "dueño": "Dueño", "profe": "Profe", "alumno": "Alumno / papá" }[perfil.rol] || perfil.rol;
+    eyebrow.textContent = `${perfil.nombre} · ${rolLabel}`;
+  }
   render();
 }
 

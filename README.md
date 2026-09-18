@@ -110,13 +110,30 @@ Para que puedan entrar de una, sin tener que confirmar el correo:
 Si se deja prendido (es lo que trae por default), después de crear la
 cuenta le va a pedir confirmar el correo antes de poder iniciar sesión.
 
-⚠️ **Importante:** hoy cualquiera que se registre entra con acceso
-completo al panel — incluida la sección "Dueños" (finanzas) y el botón
-de eliminar alumnos. Todavía no hay una pantalla que distinga "dueño" de
-"profe" (aunque la tabla `perfiles` ya guarda un campo `rol` para cuando
-se arme esa parte). Mientras tanto, tratá el link de registro como algo
-que solo comparten con gente de confianza del equipo, no como un botón
-público del sitio.
+### 3. Promover a Millán a "dueño" (una sola vez)
+
+Al registrarse, toda cuenta nueva entra como **"alumno"** por default (o
+"profe" si elige esa opción al crear la cuenta) — nadie se puede dar a sí
+mismo el rol de dueño, ni siquiera Millán. Después de que Millán se
+registre normalmente desde la app, promovelo a mano:
+
+1. Supabase → **Table Editor** → tabla **perfiles**.
+2. Buscá la fila con su correo.
+3. Editá la columna **rol** → cambiala a `dueño` (con la ñ).
+4. Guardá.
+
+La próxima vez que Millán entre (o recargue), va a ver la sección
+"Dueños" en el menú. El resto de las cuentas (profes y alumnos/papás)
+no la ven — y si escriben la URL a mano, la app les muestra "acceso
+restringido".
+
+⚠️ **Importante — lo que todavía NO distingue por rol:** hoy "profe" y
+"alumno" ven exactamente el mismo panel (alumnos, agenda, pagos, etc.),
+porque esos datos todavía viven en el navegador de cada uno, no en
+Supabase — separarlos de verdad (que un alumno solo vea sus propios
+datos) es la siguiente etapa. Por ahora, tratá el link de registro como
+algo que compartís con gente de confianza, no como un botón público del
+sitio.
 
 ### Qué quedó conectado a Supabase (comparte datos entre celulares) vs. qué sigue local
 

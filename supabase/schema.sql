@@ -14,28 +14,53 @@ create table if not exists public.perfiles (
   nombre text not null,
   telefono text,
   pais text,
-  rol text not null default 'profe' check (rol in ('dueño','profe')),
+  rol text not null default 'alumno' check (rol in ('dueño','profe','alumno')),
   creado_en timestamptz not null default now()
 );
 alter table public.perfiles add column if not exists telefono text;
 alter table public.perfiles add column if not exists pais text;
 
+-- por si esta tabla se creó con una versión vieja del esquema (solo
+-- admitía 'dueño'/'profe'): ampliamos el permiso a 'alumno' también.
+alter table public.perfiles drop constraint if exists perfiles_rol_check;
+alter table public.perfiles add constraint perfiles_rol_check check (rol in ('dueño','profe','alumno'));
+alter table public.perfiles alter column rol set default 'alumno';
+
+-- Devuelve el rol de quien está logueado ahora mismo. Se usa en las
+-- políticas de abajo para decidir qué puede ver cada quien.
+create or replace function public.rol_actual()
+returns text
+language sql stable
+security definer set search_path = public
+as $$
+  select rol from public.perfiles where id = auth.uid();
+$$;
+
 -- Crea automáticamente la fila de perfil apenas se registra alguien
--- (toma nombre/teléfono/país de los datos que mandó el formulario de
+-- (toma nombre/teléfono/país/rol de lo que mandó el formulario de
 -- registro; si se creó a mano desde el dashboard, usa el email).
+-- El rol "dueño" NUNCA se puede auto-asignar acá — si alguien manda
+-- ese valor, se lo ignora y queda "alumno". El dueño se promueve a
+-- mano (ver instrucciones en el README).
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  rol_elegido text;
 begin
+  rol_elegido := new.raw_user_meta_data->>'rol';
+  if rol_elegido is null or rol_elegido not in ('profe', 'alumno') then
+    rol_elegido := 'alumno';
+  end if;
   insert into public.perfiles (id, nombre, telefono, pais, rol)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'nombre', split_part(new.email, '@', 1)),
     new.raw_user_meta_data->>'telefono',
     new.raw_user_meta_data->>'pais',
-    'profe'
+    rol_elegido
   )
   on conflict (id) do nothing;
   return new;
