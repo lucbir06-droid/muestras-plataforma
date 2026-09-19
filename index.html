@@ -28,6 +28,14 @@
   }
   nav.site-nav a:hover{color:var(--accent-2);}
   @media (max-width:840px){ nav.site-nav .navlinks{display:none;} }
+  .auth-actions{display:flex;gap:10px;align-items:center;}
+  .hero-note{margin-top:16px;max-width:52ch;font-size:.88rem;color:var(--muted);}
+  .hero-note a{color:var(--accent-2);white-space:nowrap;margin-left:4px;}
+  @media (max-width:520px){
+    .brand-lockup span{display:none;}
+    .auth-actions{gap:6px;}
+    .auth-actions .btn{padding:9px 11px;}
+  }
 
   .hero{position:relative;overflow:hidden;padding:88px 0 72px;}
   .hero-grid{position:relative;z-index:1;display:grid;gap:40px;grid-template-columns:1.1fr .8fr;align-items:center;}
@@ -162,7 +170,11 @@
         <a href="#planes">Planes</a>
         <a href="#sedes">Sedes</a>
       </div>
-      <a class="btn btn-primary btn-sm" href="app/#/clases-prueba">Reservar clase de prueba</a>
+      <div class="auth-actions">
+        <a class="btn btn-ghost btn-sm" data-auth="out" href="app/#/login">Iniciar sesión</a>
+        <a class="btn btn-primary btn-sm" data-auth="out" href="app/#/registro">Crear cuenta</a>
+        <a class="btn btn-primary btn-sm" data-auth="in" href="app/" hidden>Ir a mi panel</a>
+      </div>
     </nav>
   </div>
 </header>
@@ -191,12 +203,15 @@
           mentalidad de élite y formación humana — en México y Estados Unidos.
         </p>
         <div class="hero-ctas">
-          <a class="btn btn-primary" href="app/#/clases-prueba">Reservar clase de prueba</a>
-          <a class="btn btn-ghost" href="#historia">Conocer la historia</a>
+          <a class="btn btn-primary" data-auth="out" href="app/#/registro">Crear cuenta</a>
+          <a class="btn btn-ghost" data-auth="out" href="app/#/login">Iniciar sesión</a>
+          <a class="btn btn-primary" data-auth="in" href="app/" hidden>Ir a mi panel</a>
         </div>
-        <div class="hero-ctas" style="margin-top:12px;">
-          <a class="btn btn-primary" style="background:var(--ink);color:var(--bg);" href="#planes">Inscribirme ahora</a>
-        </div>
+        <p class="hero-note">
+          Con tu cuenta reservas clases de prueba, te inscribes, subes tus evidencias
+          de entrenamiento y ves tus reportes y tu suscripción.
+          <a href="#historia">Conocer la academia ↓</a>
+        </p>
         <dl class="hero-contact">
           <div><dt>Teléfono</dt><dd>+52 722 240 4771</dd></div>
           <div><dt>Instagram</dt><dd><a href="https://www.instagram.com/millanacademy/" target="_blank" rel="noopener">@millanacademy</a></dd></div>
@@ -394,7 +409,7 @@
         <a href="#metodologia">Metodología</a>
         <a href="#planes">Planes</a>
         <a href="#sedes">Sedes</a>
-        <a href="app/">Acceso equipo</a>
+        <a href="app/#/login">Iniciar sesión</a>
       </div>
     </div>
     <div class="foot-bottom">
@@ -413,6 +428,26 @@
     </div>
   </div>
 </footer>
+
+<script>
+  // Si ya iniciaste sesión en este navegador, los botones de "Iniciar sesión / Crear cuenta"
+  // se cambian por "Ir a mi panel". (Solo mira si hay una sesión guardada; la app la valida.)
+  (function () {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (/^sb-.*-auth-token$/.test(k)) {
+          var v = JSON.parse(localStorage.getItem(k));
+          if (v && v.access_token) {
+            document.querySelectorAll('[data-auth="out"]').forEach(function (el) { el.hidden = true; });
+            document.querySelectorAll('[data-auth="in"]').forEach(function (el) { el.hidden = false; });
+            return;
+          }
+        }
+      }
+    } catch (e) { /* sin acceso a localStorage: se quedan los botones de entrar */ }
+  })();
+</script>
 
 <script type="module">
   import { PLANES, fmtMXN } from "./assets/js/planes.js";

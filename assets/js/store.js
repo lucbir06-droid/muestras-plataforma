@@ -1,27 +1,26 @@
 /* =========================================================
-   Millán Academy — capa de datos
+   Millán Academy — capa de datos (Supabase)
    =========================================================
 
-   La mayoría de las colecciones (alumnos, bitácora, agenda, pagos,
-   check-ins, objetivos de profes) todavía viven en localStorage —
-   sirven para probar la app, pero cada navegador ve su propia copia.
+   Todo vive en Supabase (compartido entre dispositivos y protegido
+   por los permisos de supabase/schema.sql). Para que el resto del
+   código siga leyendo de forma sincrónica, guardamos una copia en
+   memoria (C) que se carga al iniciar sesión (Store.load) y se
+   refresca después de cada cambio.
 
-   "solicitudes" e "inscripciones" ya son distintas: esas las llena
-   gente SIN cuenta desde el sitio público, así que viven en Supabase
-   (compartidas de verdad) desde el primer día. El resto se va a ir
-   migrando ahí en la próxima etapa.
+   Lo único que sigue en localStorage es la configuración local del
+   panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
 import { sb } from "./supabase-client.js";
 
-const DB_KEY = "millan_academy_v2";
+const DB_KEY = "millan_academy_v3";
 
-// Dónde se entrena de verdad (agenda, check-ins, alta de alumnos).
+// Dónde se entrena de verdad (agenda, asistencia, check-in, alta de alumnos).
 // Miami, LA, Nueva York, París, etc. son ciudades de origen de alumnos
 // internacionales, no sedes propias — eso se muestra aparte en el sitio.
 const SEDES = ["Polanco", "Metepec"];
 const CATEGORIAS = ["1ra División", "2da División", "3ra División", "4ta División"];
-const COACHES = ["Daniel Millán", "Eduardo Millán"];
 const TALLAS = ["Niño - S", "Niño - M", "Niño - L", "Adulto - S", "Adulto - M", "Adulto - L", "Adulto - XL"];
 const DIAS_DISPONIBLES = ["martes", "miércoles", "viernes"];
 const HORAS_DISPONIBLES = ["19:00", "20:00", "21:00", "22:00"];
@@ -30,430 +29,331 @@ const DIA_INDEX = { domingo: 0, lunes: 1, martes: 2, "miércoles": 3, jueves: 4,
 function uid(prefix) {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
 }
-
-function seed() {
-  const now = Date.now();
-  const days = (n) => new Date(now + n * 86400000).toISOString();
-  const past = (n) => new Date(now - n * 86400000).toISOString();
-
-  return {
-    alumnos: [
-      {
-        id: "al_1",
-        nombre: "Emilio Vargas",
-        categoria: "1ra División",
-        sede: "Polanco",
-        coach: "Daniel Millán",
-        moneda: "MXN",
-        telefono: "+52 55 1234 5678",
-        correo: "papa.vargas@gmail.com",
-        tallaPlayera: "Adulto - M",
-        activo: true,
-        alta: past(96),
-        avatar: "EV",
-        objetivos: [
-          { id: uid("obj"), titulo: "Salidas en centros laterales", avance: 65 },
-          { id: uid("obj"), titulo: "Juego con los pies bajo presión", avance: 40 },
-        ],
-        evaluacion: { tactica: 72, tecnica: 80, fisico: 68, comentarios: "Muy despierto tácticamente. Falta continuidad física en el segundo tiempo de la sesión." },
-      },
-      {
-        id: "al_2",
-        nombre: "Sofía Larrañaga",
-        categoria: "2da División",
-        sede: "Metepec",
-        coach: "Eduardo Millán",
-        moneda: "MXN",
-        telefono: "+52 722 987 6543",
-        correo: "familia.larranaga@hotmail.com",
-        tallaPlayera: "Niño - M",
-        activo: true,
-        alta: past(52),
-        avatar: "SL",
-        objetivos: [
-          { id: uid("obj"), titulo: "Colocación en mano a mano", avance: 55 },
-          { id: uid("obj"), titulo: "Reflejos a distancia corta", avance: 70 },
-        ],
-        evaluacion: { tactica: 60, tecnica: 74, fisico: 66, comentarios: "Buena progresión técnica. Trabajar lectura del juego antes del disparo." },
-      },
-      {
-        id: "al_3",
-        nombre: "Kevin Ortiz",
-        categoria: "1ra División",
-        sede: "Polanco",
-        coach: "Daniel Millán",
-        moneda: "USD",
-        telefono: "+1 305 555 0192",
-        correo: "kevin.ortiz.gk@gmail.com",
-        tallaPlayera: "Adulto - L",
-        activo: true,
-        alta: past(140),
-        avatar: "KO",
-        objetivos: [
-          { id: uid("obj"), titulo: "Saque de meta con el pie (precisión)", avance: 48 },
-          { id: uid("obj"), titulo: "Lectura de centros al área chica", avance: 62 },
-        ],
-        evaluacion: { tactica: 70, tecnica: 66, fisico: 78, comentarios: "Físico ya de nivel Primera. Falta consistencia con el pie débil." },
-      },
-      {
-        id: "al_4",
-        nombre: "Valentina Cruz",
-        categoria: "4ta División",
-        sede: "Metepec",
-        coach: "Eduardo Millán",
-        moneda: "USD",
-        telefono: "+1 213 555 0148",
-        correo: "cruz.family@gmail.com",
-        tallaPlayera: "Niño - S",
-        activo: true,
-        alta: past(18),
-        avatar: "VC",
-        objetivos: [
-          { id: uid("obj"), titulo: "Postura base y desplazamientos", avance: 30 },
-        ],
-        evaluacion: { tactica: 40, tecnica: 45, fisico: 50, comentarios: "Recién empieza. Prioridad: perder el miedo al balón en salidas." },
-      },
-    ],
-
-    bitacora: [
-      { id: uid("bit"), alumnoId: "al_1", fecha: past(2), tipo: "Entrenamiento individual",
-        nota: "Trabajo de salidas aéreas en centros laterales. Mejoró el timing del salto; todavía se anticipa antes de tiempo en balones a la espalda." },
-      { id: uid("bit"), alumnoId: "al_1", fecha: past(9), tipo: "Análisis de video",
-        nota: "Revisamos el último partido. Buen posicionamiento en 1v1, pierde metros en la reacción al primer rechace." },
-      { id: uid("bit"), alumnoId: "al_1", fecha: past(30), tipo: "Clase de prueba",
-        nota: "Primera sesión. Buena base técnica y actitud. Definimos plan de 12 semanas con foco en salidas y juego aéreo." },
-      { id: uid("bit"), alumnoId: "al_2", fecha: past(1), tipo: "Entrenamiento individual",
-        nota: "Circuito de mano a mano. Colocación mucho más sólida; hay que trabajar la recuperación rápida tras el primer rechace." },
-      { id: uid("bit"), alumnoId: "al_2", fecha: past(15), tipo: "Preparación física",
-        nota: "Trabajo de reflejos y reacción a distancias cortas con conos y balón reactivo." },
-      { id: uid("bit"), alumnoId: "al_3", fecha: past(4), tipo: "Entrenamiento individual",
-        nota: "Saque de meta con el pie: buena potencia, falta consistencia en la precisión al costado débil." },
-      { id: uid("bit"), alumnoId: "al_3", fecha: past(20), tipo: "Análisis de video",
-        nota: "Revisión de 2 partidos. Lectura de centros al área chica mejoró notablemente respecto al mes pasado." },
-      { id: uid("bit"), alumnoId: "al_4", fecha: past(3), tipo: "Clase de prueba",
-        nota: "Primera sesión. Postura base y desplazamientos laterales — trabajo desde cero, buena actitud y escucha." },
-    ],
-
-    reservas: [
-      { id: uid("res"), alumnoId: "al_1", fecha: days(1), hora: "20:00", tipo: "Entrenamiento individual", duracion: 60, sede: "Polanco", estado: "confirmada" },
-      { id: uid("res"), alumnoId: "al_2", fecha: days(2), hora: "19:00", tipo: "Entrenamiento individual", duracion: 60, sede: "Metepec", estado: "confirmada" },
-      { id: uid("res"), alumnoId: null, fecha: days(2), hora: "21:00", tipo: "Diagnóstico", duracion: 20, sede: "Metepec", estado: "disponible" },
-      { id: uid("res"), alumnoId: "al_3", fecha: days(3), hora: "10:00", tipo: "Clase de prueba", duracion: 45, sede: "Polanco", estado: "confirmada" },
-      { id: uid("res"), alumnoId: null, fecha: days(5), hora: "19:00", tipo: "Clase de prueba", duracion: 45, sede: "Polanco", estado: "disponible" },
-      { id: uid("res"), alumnoId: "al_4", fecha: days(4), hora: "22:00", tipo: "Entrenamiento individual", duracion: 60, sede: "Metepec", estado: "confirmada" },
-    ],
-
-    pagos: [
-      { id: uid("pg"), alumnoId: "al_1", concepto: "Plan mensual · Polanco", metodo: "Mercado Pago", monto: 3349, moneda: "MXN", periodicidad: "mensual", fecha: past(6), estado: "pagado" },
-      { id: uid("pg"), alumnoId: "al_2", concepto: "Plan mensual · Metepec", metodo: "Transferencia", monto: 2799, moneda: "MXN", periodicidad: "mensual", fecha: past(11), estado: "pagado" },
-      { id: uid("pg"), alumnoId: "al_3", concepto: "Plan anual", metodo: "Stripe", monto: 3200, moneda: "USD", periodicidad: "anual", fecha: past(9), estado: "pagado" },
-      { id: uid("pg"), alumnoId: "al_4", concepto: "Clase de prueba", metodo: "PayPal", monto: 25, moneda: "USD", periodicidad: null, fecha: past(3), estado: "pagado" },
-      { id: uid("pg"), alumnoId: "al_1", concepto: "Plan mensual · Polanco", metodo: "Mercado Pago", monto: 3349, moneda: "MXN", periodicidad: "mensual", fecha: days(0), estado: "pendiente" },
-      { id: uid("pg"), alumnoId: "al_2", concepto: "Plan mensual · Metepec", metodo: "Transferencia", monto: 2799, moneda: "MXN", periodicidad: "mensual", fecha: days(1), estado: "pendiente" },
-    ],
-
-    checkins: [
-      { id: uid("chk"), nombre: "Eduardo Millán", sede: "Metepec", fecha: past(1), foto: null, estado: "enviado" },
-      { id: uid("chk"), nombre: "Daniel Millán", sede: "Polanco", fecha: past(2), foto: null, estado: "enviado" },
-    ],
-
-    // objetivos por categoría — visibles para alumnos y profes ("qué se va a trabajar")
-    objetivosCategoria: [
-      { id: uid("oc"), categoria: "1ra División", profe: "Daniel Millán", titulo: "Juego aéreo bajo presión",
-        detalle: "Salidas en centros al segundo palo y comunicación con la línea defensiva.", fecha: past(2) },
-      { id: uid("oc"), categoria: "2da División", profe: "Eduardo Millán", titulo: "Mano a mano",
-        detalle: "Colocación y timing de salida en situaciones de 1v1 dentro del área.", fecha: past(3) },
-      { id: uid("oc"), categoria: "3ra División", profe: "Eduardo Millán", titulo: "Base técnica",
-        detalle: "Postura, desplazamientos laterales y recepción del balón con las dos manos.", fecha: past(1) },
-      { id: uid("oc"), categoria: "4ta División", profe: "Daniel Millán", titulo: "Perder el miedo al balón",
-        detalle: "Ejercicios progresivos de salidas cortas y caídas controladas.", fecha: past(4) },
-    ],
-
-    // contacto para plan personalizado
-    contactos: [],
-
-    // configuración editable del panel (punto de equilibrio, etc.)
-    config: { costosFijosMXN: 45000 },
-  };
+function iniciales(nombre) {
+  return String(nombre || "").split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+}
+// "YYYY-MM-DD" con la fecha LOCAL (toISOString usaría UTC y puede correr un día)
+function toYMD(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function aYMD(valor) {
+  if (typeof valor === "string" && /^\d{4}-\d{2}-\d{2}/.test(valor)) return valor.slice(0, 10);
+  return toYMD(new Date(valor));
 }
 
-function load() {
+/* ---------------- configuración local ---------------- */
+function loadLocal() {
   try {
     const raw = localStorage.getItem(DB_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      // migración: si esta sesión guardó datos antes de que existiera alguna
-      // colección nueva, la completamos sin pisar lo demás.
-      const fresh = seed();
-      for (const key of Object.keys(fresh)) {
-        if (!(key in data)) data[key] = fresh[key];
-      }
-      return data;
-    }
-  } catch (e) { /* localStorage no disponible: seguimos con datos de ejemplo en memoria */ }
-  const data = seed();
-  save(data);
-  return data;
+    if (raw) return { config: { costosFijosMXN: 45000 }, ...JSON.parse(raw) };
+  } catch (e) { /* localStorage no disponible */ }
+  return { config: { costosFijosMXN: 45000 } };
 }
-
-function save(data) {
-  try { localStorage.setItem(DB_KEY, JSON.stringify(data)); } catch (e) { /* modo privado / cuota: se pierde al recargar */ }
+function saveLocal() {
+  try { localStorage.setItem(DB_KEY, JSON.stringify(state)); } catch (e) { /* modo privado / cuota */ }
 }
+const state = loadLocal();
 
-const state = load();
-
-/* siguiente ocurrencia de un día de la semana (0=dom) a partir de hoy, +offset días extra */
+/* siguiente ocurrencia de un día de la semana, +N semanas */
 function proximaFecha(diaNombre, semanasAdelante) {
   const objetivo = DIA_INDEX[diaNombre];
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   let delta = (objetivo - hoy.getDay() + 7) % 7;
   if (delta === 0) delta = 7; // siempre la próxima, no hoy mismo
-  const fecha = new Date(hoy.getTime() + (delta + semanasAdelante * 7) * 86400000);
-  return fecha.toISOString();
+  return new Date(hoy.getTime() + (delta + semanasAdelante * 7) * 86400000);
 }
 
-/* =========================================================
-   solicitudes e inscripciones — respaldadas por Supabase.
-   Guardamos una copia en memoria (_solicitudes/_inscripciones) que
-   se refresca después de cada cambio, así el resto del código las
-   lee de forma sincrónica igual que a las demás colecciones.
-   ========================================================= */
-let _solicitudes = [];
-let _inscripciones = [];
-let _evidencias = [];
+/* ---------------- copia en memoria + cargadores ---------------- */
+const C = {
+  alumnos: [], bitacora: [], reservas: [], pagos: [], checkins: [], asistencias: [],
+  evidencias: [], solicitudes: [], inscripciones: [], objetivos: [], perfiles: [],
+};
 
-function mapSolicitud(row) {
-  return { id: row.id, nombre: row.nombre, edad: row.edad, telefono: row.telefono, pais: row.pais, zona: row.zona, sede: row.sede, mensaje: row.mensaje, estado: row.estado, fecha: row.fecha };
-}
-function mapInscripcion(row) {
-  return {
-    id: row.id, nombre: row.nombre, telefono: row.telefono, planId: row.plan_id, duracionId: row.duracion_id,
-    planNombre: row.plan_nombre, duracionLabel: row.duracion_label, monto: row.monto, moneda: row.moneda,
-    tallaPlayera: row.talla_playera, estado: row.estado, fecha: row.fecha,
-  };
+const urlFoto = (bucket, path) => (path ? sb.storage.from(bucket).getPublicUrl(path).data.publicUrl : null);
+
+const mapAlumno = (r) => ({
+  id: r.id, nombre: r.nombre, categoria: r.categoria, sede: r.sede, coach: r.coach, coachId: r.coach_id,
+  moneda: r.moneda || "MXN", telefono: r.telefono || "", correo: r.correo || "", tallaPlayera: r.talla_playera || "",
+  activo: r.activo, avatar: r.avatar || iniciales(r.nombre), objetivos: r.objetivos || [],
+  evaluacion: r.evaluacion || { tactica: 0, tecnica: 0, fisico: 0, comentarios: "" },
+  alta: r.alta, codigoVinculo: r.codigo_vinculo,
+});
+const mapBitacora = (r) => ({ id: r.id, alumnoId: r.alumno_id, tipo: r.tipo, nota: r.nota, autor: r.autor, fecha: r.fecha });
+// la fecha de una reserva es un día (sin hora): la dejamos al mediodía local para que ninguna zona horaria la corra de día
+const mapReserva = (r) => ({
+  id: r.id, alumnoId: r.alumno_id, fecha: `${r.fecha}T12:00:00`, hora: r.hora, tipo: r.tipo,
+  duracion: r.duracion, sede: r.sede, estado: r.estado,
+});
+const mapPago = (r) => ({
+  id: r.id, alumnoId: r.alumno_id, concepto: r.concepto, metodo: r.metodo, monto: Number(r.monto),
+  moneda: r.moneda, periodicidad: r.periodicidad, fecha: r.fecha, estado: r.estado,
+});
+const mapCheckin = (r) => ({
+  id: r.id, nombre: r.nombre, sede: r.sede, tipo: r.tipo || "entrada", resumen: r.resumen,
+  fotoUrl: urlFoto("checkins", r.foto_path), estado: r.estado, fecha: r.fecha, registradoPor: r.registrado_por,
+});
+const mapAsistencia = (r) => ({
+  id: r.id, alumnoId: r.alumno_id, fecha: r.fecha, sede: r.sede, presente: r.presente, registradoPor: r.registrado_por,
+});
+const mapEvidencia = (r) => ({
+  id: r.id, alumnoId: r.alumno_id, alumnoNombre: r.alumno_nombre, tipo: r.tipo, comentario: r.comentario,
+  fotoUrl: urlFoto("evidencias", r.foto_path), fecha: r.fecha,
+});
+const mapSolicitud = (r) => ({
+  id: r.id, nombre: r.nombre, edad: r.edad, telefono: r.telefono, pais: r.pais, zona: r.zona, sede: r.sede,
+  mensaje: r.mensaje, estado: r.estado, fecha: r.fecha,
+});
+const mapInscripcion = (r) => ({
+  id: r.id, nombre: r.nombre, telefono: r.telefono, planId: r.plan_id, duracionId: r.duracion_id,
+  planNombre: r.plan_nombre, duracionLabel: r.duracion_label, monto: Number(r.monto), moneda: r.moneda,
+  tallaPlayera: r.talla_playera, estado: r.estado, fecha: r.fecha,
+});
+const mapObjetivo = (r) => ({ id: r.id, categoria: r.categoria, profe: r.profe, titulo: r.titulo, detalle: r.detalle, fecha: r.fecha });
+const mapPerfil = (r) => ({ id: r.id, nombre: r.nombre, telefono: r.telefono, pais: r.pais, rol: r.rol, rolSolicitado: r.rol_solicitado });
+
+const TABLAS = {
+  alumnos:       { tabla: "alumnos",             orden: ["alta", false],   map: mapAlumno },
+  bitacora:      { tabla: "bitacora",            orden: ["fecha", false],  map: mapBitacora },
+  reservas:      { tabla: "reservas",            orden: ["fecha", true],   map: mapReserva },
+  pagos:         { tabla: "pagos",               orden: ["fecha", false],  map: mapPago },
+  checkins:      { tabla: "checkins",            orden: ["fecha", false],  map: mapCheckin },
+  asistencias:   { tabla: "asistencias",         orden: ["fecha", false],  map: mapAsistencia },
+  evidencias:    { tabla: "evidencias",          orden: ["fecha", false],  map: mapEvidencia },
+  solicitudes:   { tabla: "solicitudes",         orden: ["fecha", false],  map: mapSolicitud },
+  inscripciones: { tabla: "inscripciones",       orden: ["fecha", false],  map: mapInscripcion },
+  objetivos:     { tabla: "objetivos_categoria", orden: ["fecha", false],  map: mapObjetivo },
+  perfiles:      { tabla: "perfiles",            orden: ["creado_en", true], map: mapPerfil },
+};
+
+async function cargar(clave) {
+  const def = TABLAS[clave];
+  const { data, error } = await sb.from(def.tabla).select("*").order(def.orden[0], { ascending: def.orden[1] });
+  if (error) { console.warn(`No se pudo cargar "${def.tabla}":`, error.message); return; }
+  C[clave] = (data || []).map(def.map);
 }
 
-async function cargarSolicitudes() {
-  const { data, error } = await sb.from("solicitudes").select("*").order("fecha", { ascending: false });
-  if (!error && data) _solicitudes = data.map(mapSolicitud);
-  // si hay error (ej. todavía no iniciaste sesión, o no se corrió el schema.sql) dejamos la lista como estaba
-}
-async function cargarInscripciones() {
-  const { data, error } = await sb.from("inscripciones").select("*").order("fecha", { ascending: false });
-  if (!error && data) _inscripciones = data.map(mapInscripcion);
-}
+let cargandoPara = null;   // promesa en curso (evita cargar dos veces a la vez)
+let cargadoDe = null;      // id de la cuenta para la que ya está cargado
 
-function mapEvidencia(row) {
-  let fotoUrl = null;
-  if (row.foto_path) fotoUrl = sb.storage.from("evidencias").getPublicUrl(row.foto_path).data.publicUrl;
-  return { id: row.id, alumnoNombre: row.alumno_nombre, tipo: row.tipo, comentario: row.comentario, fotoUrl, fecha: row.fecha };
+async function insertar(tabla, filas) {
+  const { data, error } = await sb.from(tabla).insert(filas).select();
+  if (error) throw error;
+  return data;
 }
-async function cargarEvidencias() {
-  const { data, error } = await sb.from("evidencias").select("*").order("fecha", { ascending: false });
-  if (!error && data) _evidencias = data.map(mapEvidencia);
-}
-
-const ready = Promise.all([cargarSolicitudes(), cargarInscripciones(), cargarEvidencias()]);
 
 export const Store = {
-  SEDES, CATEGORIAS, COACHES, TALLAS, DIAS_DISPONIBLES, HORAS_DISPONIBLES,
-  ready,
+  SEDES, CATEGORIAS, TALLAS, DIAS_DISPONIBLES, HORAS_DISPONIBLES,
 
-  all() { return state; },
-
-  reset() {
-    const fresh = seed();
-    save(fresh);
-    Object.assign(state, fresh);
-    return state;
+  /* ---- ciclo de vida ---- */
+  // carga todo lo que la cuenta actual tiene permiso de ver
+  load(userId) {
+    if (cargadoDe === userId) return Promise.resolve();
+    if (cargandoPara && cargandoPara.userId === userId) return cargandoPara.promesa;
+    const promesa = Promise.all(Object.keys(TABLAS).map(cargar)).then(() => { cargadoDe = userId; });
+    cargandoPara = { userId, promesa };
+    return promesa;
   },
-
-  // ---- alumnos ----
-  alumnos() { return state.alumnos; },
-  alumno(id) { return state.alumnos.find(a => a.id === id) || null; },
-  addAlumno(data) {
-    const a = {
-      id: uid("al"), objetivos: [], activo: true, alta: new Date().toISOString(),
-      evaluacion: { tactica: 0, tecnica: 0, fisico: 0, comentarios: "" },
-      ...data,
-    };
-    state.alumnos.unshift(a);
-    save(state);
-    return a;
+  clear() {
+    for (const k of Object.keys(C)) C[k] = [];
+    cargadoDe = null;
+    cargandoPara = null;
   },
-  actualizarEvaluacion(id, patch) {
+  recargar(...claves) { return Promise.all(claves.map(cargar)); },
+
+  /* ---- alumnos ---- */
+  alumnos() { return C.alumnos; },
+  alumno(id) { return C.alumnos.find((a) => a.id === id) || null; },
+  async addAlumno(d) {
+    const [fila] = await insertar("alumnos", {
+      nombre: d.nombre, categoria: d.categoria, sede: d.sede, coach: d.coach || null, coach_id: d.coachId || null,
+      moneda: d.moneda, telefono: d.telefono, correo: d.correo, talla_playera: d.tallaPlayera, avatar: iniciales(d.nombre),
+    });
+    await cargar("alumnos");
+    return mapAlumno(fila);
+  },
+  async actualizarEvaluacion(id, patch) {
     const a = this.alumno(id);
-    if (a) { a.evaluacion = { ...a.evaluacion, ...patch }; save(state); }
-    return a;
+    const evaluacion = { ...(a?.evaluacion || {}), ...patch };
+    const { error } = await sb.from("alumnos").update({ evaluacion }).eq("id", id);
+    if (error) throw error;
+    await cargar("alumnos");
   },
-  eliminarAlumno(id) {
-    state.alumnos = state.alumnos.filter((a) => a.id !== id);
-    save(state);
+  async asignarCoach(alumnoId, coachId) {
+    const coach = C.perfiles.find((p) => p.id === coachId);
+    const { error } = await sb.from("alumnos").update({ coach_id: coachId || null, coach: coach?.nombre || null }).eq("id", alumnoId);
+    if (error) throw error;
+    await cargar("alumnos");
+  },
+  async eliminarAlumno(id) {
+    const { error } = await sb.from("alumnos").delete().eq("id", id);
+    if (error) throw error;
+    await Promise.all(["alumnos", "bitacora", "reservas", "pagos", "asistencias", "evidencias"].map(cargar));
+  },
+  // el papá / alumno escribe el código que le dio la academia
+  async vincularAlumno(codigo) {
+    const { error } = await sb.rpc("vincular_alumno", { p_codigo: codigo });
+    if (error) throw error;
+    await Promise.all(Object.keys(TABLAS).map(cargar));
   },
 
-  // ---- bitácora ----
+  /* ---- staff (para asignar profes) ---- */
+  perfiles() { return C.perfiles; },
+  coaches() { return C.perfiles.filter((p) => p.rol === "profe" || p.rol === "dueño"); },
+  profesPendientes() { return C.perfiles.filter((p) => p.rol === "alumno" && p.rolSolicitado === "profe"); },
+  async aprobarProfe(id) {
+    const { error } = await sb.from("perfiles").update({ rol: "profe" }).eq("id", id);
+    if (error) throw error;
+    await cargar("perfiles");
+  },
+
+  /* ---- bitácora / reportes ---- */
   bitacoraDe(alumnoId) {
-    return state.bitacora
-      .filter(b => b.alumnoId === alumnoId)
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    return C.bitacora.filter((b) => b.alumnoId === alumnoId).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   },
-  addBitacora(entry) {
-    const e = { id: uid("bit"), fecha: new Date().toISOString(), ...entry };
-    state.bitacora.unshift(e);
-    save(state);
-    return e;
+  async addBitacora({ alumnoId, tipo, nota, fecha, autor }) {
+    await insertar("bitacora", { alumno_id: alumnoId, tipo, nota, autor, fecha: fecha || new Date().toISOString() });
+    await cargar("bitacora");
   },
 
-  // ---- reservas ----
+  /* ---- agenda ---- */
   reservas() {
-    return state.reservas.slice().sort((a, b) => new Date(a.fecha + "T" + a.hora) - new Date(b.fecha + "T" + b.hora));
+    return C.reservas.slice().sort((a, b) => new Date(a.fecha.slice(0, 10) + "T" + a.hora) - new Date(b.fecha.slice(0, 10) + "T" + b.hora));
   },
-  addReserva(entry) {
-    const r = { id: uid("res"), estado: "confirmada", ...entry };
-    state.reservas.push(r);
-    save(state);
-    return r;
+  async addReserva({ alumnoId = null, fecha, hora, tipo, duracion, sede, estado = "confirmada" }) {
+    await insertar("reservas", { alumno_id: alumnoId, fecha: aYMD(fecha), hora, tipo, duracion, sede, estado });
+    await cargar("reservas");
   },
-  reservar(id, alumnoId) {
-    const r = state.reservas.find(x => x.id === id);
-    if (r) { r.alumnoId = alumnoId; r.estado = "confirmada"; save(state); }
-    return r;
+  async reservar(id, alumnoId) {
+    const { error } = await sb.from("reservas").update({ alumno_id: alumnoId, estado: "confirmada" }).eq("id", id);
+    if (error) throw error;
+    await cargar("reservas");
   },
   // crea huecos disponibles para los próximos martes/miércoles/viernes a las 4 horas fijas
-  generarHorariosSemana(sede, semanas = 1) {
-    let creados = 0;
+  async generarHorariosSemana(sede, semanas = 1) {
+    const filas = [];
     for (let s = 0; s < semanas; s++) {
       for (const dia of DIAS_DISPONIBLES) {
-        const fecha = proximaFecha(dia, s);
+        const fecha = toYMD(proximaFecha(dia, s));
         for (const hora of HORAS_DISPONIBLES) {
-          const yaExiste = state.reservas.some((r) => r.fecha.slice(0, 10) === fecha.slice(0, 10) && r.hora === hora && r.sede === sede);
-          if (yaExiste) continue;
-          state.reservas.push({ id: uid("res"), alumnoId: null, fecha, hora, tipo: "Entrenamiento individual", duracion: 60, sede, estado: "disponible" });
-          creados++;
+          const yaExiste = C.reservas.some((r) => r.fecha.slice(0, 10) === fecha && r.hora === hora && r.sede === sede);
+          if (!yaExiste) filas.push({ alumno_id: null, fecha, hora, tipo: "Entrenamiento individual", duracion: 60, sede, estado: "disponible" });
         }
       }
     }
-    save(state);
-    return creados;
+    if (filas.length) {
+      await insertar("reservas", filas);
+      await cargar("reservas");
+    }
+    return filas.length;
   },
 
-  // ---- solicitudes de clase de prueba (Supabase — compartidas de verdad) ----
-  solicitudes() {
-    return _solicitudes;
+  /* ---- asistencia ---- */
+  asistencias() { return C.asistencias; },
+  asistenciasDe(fecha, sede) { return C.asistencias.filter((a) => a.fecha === fecha && a.sede === sede); },
+  asistenciasAlumno(alumnoId) { return C.asistencias.filter((a) => a.alumnoId === alumnoId); },
+  // veces que asistió en los últimos N días
+  conteoAsistencia(alumnoId, dias = 30) {
+    const desde = toYMD(new Date(Date.now() - dias * 86400000));
+    return C.asistencias.filter((a) => a.alumnoId === alumnoId && a.presente && a.fecha >= desde).length;
   },
-  async addSolicitud(entry) {
-    const { data, error } = await sb.from("solicitudes").insert({
-      nombre: entry.nombre, edad: entry.edad, telefono: entry.telefono, pais: entry.pais, zona: entry.zona, sede: entry.sede, mensaje: entry.mensaje,
-    }).select().single();
+  // items: [{ alumnoId, presente }]
+  async guardarAsistencias(fecha, sede, items, registradoPor) {
+    if (!items.length) return;
+    const filas = items.map((i) => ({ alumno_id: i.alumnoId, fecha, sede, presente: i.presente, registrado_por: registradoPor }));
+    const { error } = await sb.from("asistencias").upsert(filas, { onConflict: "alumno_id,fecha,sede" });
     if (error) throw error;
-    await cargarSolicitudes();
-    return mapSolicitud(data);
+    await cargar("asistencias");
+  },
+
+  /* ---- solicitudes de clase de prueba ---- */
+  solicitudes() { return C.solicitudes; },
+  async addSolicitud(e) {
+    await insertar("solicitudes", {
+      nombre: e.nombre, edad: e.edad, telefono: e.telefono, pais: e.pais, zona: e.zona, sede: e.sede, mensaje: e.mensaje,
+    });
+    await cargar("solicitudes");
   },
   async actualizarSolicitud(id, estado) {
     const { error } = await sb.from("solicitudes").update({ estado }).eq("id", id);
     if (error) throw error;
-    await cargarSolicitudes();
+    await cargar("solicitudes");
   },
 
-  // ---- pagos ----
-  pagos() {
-    return state.pagos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  },
-  addPago(entry) {
-    const p = { id: uid("pg"), fecha: new Date().toISOString(), estado: "pendiente", ...entry };
-    state.pagos.unshift(p);
-    save(state);
-    return p;
-  },
-
-  // ---- check-ins (llegada a cancha con foto) ----
-  checkins() {
-    return state.checkins.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  },
-  addCheckin(entry) {
-    const c = { id: uid("chk"), fecha: new Date().toISOString(), estado: "enviando", foto: null, ...entry };
-    state.checkins.unshift(c);
-    save(state);
-    return c;
-  },
-  updateCheckin(id, patch) {
-    const c = state.checkins.find((x) => x.id === id);
-    if (c) { Object.assign(c, patch); save(state); }
-    return c;
-  },
-
-  // ---- objetivos por categoría (sección de profes) ----
-  objetivosCategoria() {
-    return state.objetivosCategoria.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  },
-  objetivosDeCategoria(categoria) {
-    return this.objetivosCategoria().filter((o) => o.categoria === categoria);
-  },
-  addObjetivoCategoria(entry) {
-    const o = { id: uid("oc"), fecha: new Date().toISOString(), ...entry };
-    state.objetivosCategoria.unshift(o);
-    save(state);
-    return o;
-  },
-
-  // ---- inscripciones (botón "Inscribirse" del sitio, Supabase — compartidas de verdad) ----
-  inscripciones() {
-    return _inscripciones;
-  },
-  async addInscripcion(entry) {
-    const { data, error } = await sb.from("inscripciones").insert({
-      nombre: entry.nombre, telefono: entry.telefono, plan_id: entry.planId, duracion_id: entry.duracionId,
-      plan_nombre: entry.planNombre, duracion_label: entry.duracionLabel, monto: entry.monto, moneda: entry.moneda,
-      talla_playera: entry.tallaPlayera,
-    }).select().single();
-    if (error) throw error;
-    await cargarInscripciones();
-    return mapInscripcion(data);
+  /* ---- inscripciones ---- */
+  inscripciones() { return C.inscripciones; },
+  async addInscripcion(e) {
+    await insertar("inscripciones", {
+      nombre: e.nombre, telefono: e.telefono, plan_id: e.planId, duracion_id: e.duracionId,
+      plan_nombre: e.planNombre, duracion_label: e.duracionLabel, monto: e.monto, moneda: e.moneda,
+      talla_playera: e.tallaPlayera,
+    });
+    await cargar("inscripciones");
   },
   async actualizarInscripcion(id, estado) {
     const { error } = await sb.from("inscripciones").update({ estado }).eq("id", id);
     if (error) throw error;
-    await cargarInscripciones();
+    await cargar("inscripciones");
   },
 
-  // ---- evidencias (pruebas que sube el alumno: gym, comidas, etc.) ----
-  evidencias() {
-    return _evidencias;
+  /* ---- pagos ---- */
+  pagos() { return C.pagos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
+  async addPago(e) {
+    await insertar("pagos", {
+      alumno_id: e.alumnoId || null, concepto: e.concepto, metodo: e.metodo, monto: e.monto, moneda: e.moneda,
+      periodicidad: e.periodicidad || null, estado: e.estado || "pendiente",
+    });
+    await cargar("pagos");
   },
-  evidenciasDe(alumnoNombre) {
-    return _evidencias.filter((e) => e.alumnoNombre.toLowerCase() === alumnoNombre.toLowerCase());
+
+  /* ---- check-in / check-out ---- */
+  checkins() { return C.checkins.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
+  // devuelve el registro creado (para poder marcar después si el email salió o no)
+  async addCheckin({ nombre, sede, tipo = "entrada", resumen = null, fotoBlob = null, estado = "guardado" }) {
+    let fotoPath = null;
+    if (fotoBlob) {
+      fotoPath = `${Date.now()}-${uid("ck")}.jpg`;
+      const { error: upErr } = await sb.storage.from("checkins").upload(fotoPath, fotoBlob, { contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+    }
+    const [fila] = await insertar("checkins", { nombre, sede, tipo, resumen, foto_path: fotoPath, estado });
+    await cargar("checkins");
+    return mapCheckin(fila);
   },
-  async addEvidencia({ alumnoNombre, tipo, comentario, fotoBlob }) {
+  async updateCheckin(id, patch) {
+    const { error } = await sb.from("checkins").update(patch).eq("id", id);
+    if (error) throw error;
+    await cargar("checkins");
+  },
+
+  /* ---- objetivos por categoría (sección de profes) ---- */
+  objetivosCategoria() { return C.objetivos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
+  async addObjetivoCategoria(e) {
+    await insertar("objetivos_categoria", { categoria: e.categoria, profe: e.profe, titulo: e.titulo, detalle: e.detalle });
+    await cargar("objetivos");
+  },
+
+  /* ---- evidencias (pruebas que sube el alumno: gym, comidas, etc.) ---- */
+  evidencias() { return C.evidencias; },
+  evidenciasDe(alumnoId) { return C.evidencias.filter((e) => e.alumnoId === alumnoId); },
+  async addEvidencia({ alumnoId, alumnoNombre, tipo, comentario, fotoBlob }) {
     let fotoPath = null;
     if (fotoBlob) {
       fotoPath = `${Date.now()}-${uid("ev")}.jpg`;
       const { error: upErr } = await sb.storage.from("evidencias").upload(fotoPath, fotoBlob, { contentType: "image/jpeg" });
       if (upErr) throw upErr;
     }
-    const { data, error } = await sb.from("evidencias").insert({
-      alumno_nombre: alumnoNombre, tipo, comentario, foto_path: fotoPath,
-    }).select().single();
-    if (error) throw error;
-    await cargarEvidencias();
-    return mapEvidencia(data);
+    await insertar("evidencias", { alumno_id: alumnoId, alumno_nombre: alumnoNombre, tipo, comentario, foto_path: fotoPath });
+    await cargar("evidencias");
   },
 
-  // ---- contacto para plan personalizado ----
-  contactos() {
-    return state.contactos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  },
-  addContacto(entry) {
-    const c = { id: uid("ct"), fecha: new Date().toISOString(), ...entry };
-    state.contactos.unshift(c);
-    save(state);
-    return c;
-  },
-
-  // ---- configuración (punto de equilibrio, etc.) ----
+  /* ---- configuración local (punto de equilibrio) ---- */
   config() { return state.config; },
   setCostosFijos(monto) {
     state.config.costosFijosMXN = monto;
-    save(state);
+    saveLocal();
   },
 };
+
+export { toYMD };

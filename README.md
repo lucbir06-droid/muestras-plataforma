@@ -1,152 +1,135 @@
-# Millán Academy — sitio + panel interno
+# Millán Academy — sitio + app
 
-Marca real de Millán Academy (academia de porteros, Polanco · Metepec · Miami ·
-LA · Nueva York · París), tomada de su PDF de identidad: fondo negro, verde
-`#7CC26B`, tipografía técnica en bloques (Chakra Petch + Barlow).
+Marca real de Millán Academy (academia de porteros, sedes Polanco y Metepec),
+tomada de su PDF de identidad: fondo negro, verde `#7CC26B`, tipografía
+técnica en bloques (Chakra Petch + Barlow).
 
 **Sitio en vivo:** https://lucbir06-droid.github.io/muestras-plataforma/
 
-## Estructura
+## Cómo está armado
+
+- **Sitio público** (`index.html`): información de la academia (historia,
+  entrenadores, planes y precios, sedes). Se ve sin cuenta. Arriba siempre
+  están los botones **Iniciar sesión / Crear cuenta**.
+- **App** (`app/`): todo lo funcional. **Solo se entra con cuenta.** Tiene tres
+  roles y cada uno ve únicamente lo suyo.
 
 ```
-index.html               sitio público (historia, entrenadores, planes y precios, sedes)
-app/index.html            panel interno (ver lista de pantallas abajo)
+index.html               sitio público
+app/index.html            la app (login, registro y paneles por rol)
 assets/css/brand.css       tokens de marca + componentes compartidos
-assets/css/app.css         layout y componentes del panel
-assets/js/store.js          datos de ejemplo + guardado en localStorage
-assets/js/app.js            router y pantallas del panel
-assets/js/planes.js         precios y (cuando existan) links de pago de Mercado Pago
-assets/js/config.js         Access Key de Web3Forms (notificación de check-in por email)
-assets/img/                 escudo (recortado del PDF de marca) en varios tamaños
-mockups/index.html         las 4 muestras de estilo originales (archivo, ya no se usa)
+assets/css/app.css         layout y componentes de la app
+assets/js/app.js           router, roles y todas las pantallas
+assets/js/store.js         datos (Supabase) con copia en memoria
+assets/js/planes.js        precios y (cuando existan) links de pago de Mercado Pago
+assets/js/config.js        Access Key de Web3Forms (aviso por email a Millán)
+assets/js/supabase-client.js  conexión a Supabase
+supabase/schema.sql        tablas, roles y permisos (se pega en Supabase)
+mockups/index.html        las 4 muestras de estilo originales (archivo)
 ```
 
-No hay build ni framework: todo es HTML/CSS/JS plano, así que se puede editar
-cualquier archivo y subirlo directo a GitHub sin instalar nada.
+Sin build ni framework: HTML/CSS/JS plano, se edita y se sube a GitHub.
 
-## Pantallas del panel (`app/`)
+## Los tres roles
 
-Panel · Check-in (foto + email a Millán) · Evidencias (el alumno sube
-foto de que hizo lo que se le pidió: gym, comidas del plan de
-nutrición, etc.) · Alumnos · Agenda · Clases de prueba · Inscripciones
-(desde el botón "Inscribirme" del sitio) · Objetivos de profes (por
-categoría, lo ven alumnos y profes) · Reportes (táctica / técnica /
-físico + comentarios) · Pagos · Dueños (financiero, punto de
-equilibrio, pagos pendientes, eliminar alumnos) · Chat (vista previa).
+| Rol | Qué ve |
+|---|---|
+| **Dueño** (Millán) | Todo: finanzas, pagos, altas y bajas de alumnos, aprobar profes, todos los check-ins. |
+| **Profe** | Sus alumnos, agenda, **asistencia**, **check-in / check-out**, reportes, objetivos, clases de prueba, evidencias de sus alumnos. |
+| **Alumno / papá** | Solo lo suyo: su panel, **evidencias** (gym, comidas), agenda, clases de prueba, reportes que le dejan los profes, **estado de su suscripción**, chat. |
 
-## Estado actual — qué es real y qué es demo
+Esto no es solo esconder botones: los permisos están **en la base de datos**
+(`supabase/schema.sql`, sección "Permisos"), así que aunque alguien modifique la
+página no puede leer datos de otros.
 
-- El **sitio público** (`index.html`) es contenido real, con los precios
-  reales de Millán, listo para mostrarse.
-- El **panel** (`app/`) ahora pide **login real** (Supabase Auth) para
-  entrar a todo, sin excepción — incluido reservar una clase de prueba
-  o inscribirse/pagar. Ver el sitio público (`index.html`) no pide
-  cuenta; el login aparece recién cuando tocan "Reservar clase de
-  prueba" o "Inscribirme".
-- **La mayoría de los datos siguen en el navegador (`localStorage`) de
-  quien los carga**, no en un servidor compartido — si Millán y un profe
-  entran cada uno desde su celular, cada uno ve su propia copia de
-  alumnos/agenda/pagos. Las excepciones son **solicitudes** e
-  **inscripciones**, que ya viven en Supabase y sí se comparten de
-  verdad. Migrar el resto es la siguiente etapa.
-- **Todavía no hay roles/permisos** (dueño vs. profe) — cualquiera con una
-  cuenta ve todo, incluida la sección "Dueños". Se puede afinar más
-  adelante con la tabla `perfiles` que ya está en el esquema.
-- **El chat es solo una vista previa** — no manda mensajes de verdad
-  todavía (necesita Supabase Realtime).
-- **Los pagos con tarjeta no cobran solos.** El botón "Elegir plan" del
-  sitio manda a un link de pago de Mercado Pago si ya está cargado en
-  `assets/js/planes.js`; si no, guarda la inscripción como pendiente para
-  que Millán la cobre y la active a mano desde el panel.
+### Cómo se ligan los papás / alumnos a su alumno
 
-## Cómo crear un link de pago de Mercado Pago (sin programar, ~5 min por plan)
+1. El dueño da de alta al alumno → la ficha muestra un **código** de 8 caracteres.
+2. El papá crea su cuenta (elige "Soy alumno o papá/mamá"), entra y escribe
+   ese código en **"Vincula a tu alumno"**.
+3. Desde ese momento ve la agenda, reportes y suscripción de ese alumno.
+   (Un papá con dos hijos vincula los dos códigos.)
 
-1. Entrar a la cuenta de Mercado Pago de Millán → **Cobrar → Link de pago**.
-2. Poner el nombre del plan (ej. "Polanco — Mensual") y el precio **real**
-   (el que no está tachado).
-3. Copiar el link generado.
-4. Pegarlo en `assets/js/planes.js`, en el campo `linkPago` del plan y la
-   duración que corresponda.
-5. Subir el cambio a GitHub (`git add -A && git commit -m "..." && git push`).
+No depende de que el correo esté confirmado, así que nadie puede "adivinar"
+el correo de otra familia para ver sus datos.
 
-Se puede hacer plan por plan — no hace falta tener los 9 links para que
-el sitio funcione; los que no tengan link muestran el formulario de
-inscripción en su lugar.
+### Cómo se aprueba a un profe
 
-## Supabase — estado actual
+Quien se registra como profe entra **como alumno** y queda pendiente. El dueño
+lo ve en **Panel → "Profes por aprobar"** (o en la sección Dueños) y lo aprueba
+con un botón. Después, en la ficha de cada alumno, el dueño elige qué profe lo
+tiene a cargo; cada profe ve solo a los suyos (y a los "sin asignar").
 
-Ya está conectado (`assets/js/supabase-client.js`). Lo que falta para que
-funcione del todo:
+## Lo nuevo de esta versión
 
-⚠️ Si ya habías corrido `schema.sql` antes, **volvé a correrlo** — se
-agregó la tabla `evidencias` (con su bucket de fotos) y cambió el
-permiso de "solicitudes" e "inscripciones": antes cualquiera podía
-enviarlas sin cuenta, ahora piden estar logueado, igual que el resto.
-Correrlo de nuevo no borra nada de lo que ya tenías.
+- **Asistencia**: el profe marca quién asistió a cada entrenamiento (sede + fecha);
+  queda el historial por día y por alumno.
+- **Check-out del profe**: al terminar, marca asistencia, escribe el **reporte de
+  cada alumno** y lo envía. Los reportes le llegan a cada alumno/papá en su panel y
+  Millán recibe el resumen (por email si está conectado Web3Forms).
+- **Evidencias**: el alumno sube foto de que hizo lo que se le pidió (gym,
+  comidas del plan de nutrición…), asociada a su ficha.
+- **Datos compartidos de verdad**: alumnos, bitácora, agenda, pagos, asistencia,
+  check-ins y evidencias viven en Supabase (antes vivían en el navegador de cada quien).
 
-### 1. Crear las tablas (una sola vez)
+## Puesta en marcha (una sola vez)
 
-1. Entrar al proyecto en supabase.com → menú izquierdo → **SQL Editor**.
-2. **New query**.
-3. Abrir [`supabase/schema.sql`](supabase/schema.sql) de este repo, copiar
-   todo el contenido y pegarlo ahí.
-4. Click **Run**.
+### 1. Correr el esquema en Supabase
 
-Se puede volver a correr sin problema si hace falta (no borra datos que ya
-existan).
+1. supabase.com → tu proyecto → **SQL Editor** → **New query**.
+2. Pegar **todo** [`supabase/schema.sql`](supabase/schema.sql) → **Run**.
 
-### 2. Crear las cuentas del staff (Millán + cada profe)
+Se puede volver a correr las veces que haga falta: no borra datos y deja los
+permisos siempre como dice el archivo. **Hay que volver a correrlo cada vez que
+cambie ese archivo** (esta versión lo cambió bastante).
 
-Ahora se pueden crear solos desde la propia pantalla de login del panel
-(`app/`) → **"¿No tienes cuenta? Crea una"** → nombre, correo, teléfono,
-país y contraseña.
+### 2. Registrar a Millán y hacerlo "dueño"
 
-Para que puedan entrar de una, sin tener que confirmar el correo:
+1. Millán crea su cuenta desde la app (**Crear cuenta**).
+2. Supabase → **Table Editor** → tabla **perfiles** → su fila → columna **rol** →
+   escribir `dueño` (con ñ) → guardar.
+3. Millán recarga la app: ahora ve todo.
 
-1. En Supabase → **Authentication → Sign In / Providers → Email**.
-2. Apagar **"Confirm email"**.
-3. Guardar.
+Es el único rol que **no** se puede pedir desde el registro (a propósito).
 
-Si se deja prendido (es lo que trae por default), después de crear la
-cuenta le va a pedir confirmar el correo antes de poder iniciar sesión.
+### 3. (Opcional) Confirmación de correo
 
-### 3. Promover a Millán a "dueño" (una sola vez)
+No es necesaria para la seguridad de los datos. Si se quiere que entren sin
+confirmar el correo: Supabase → **Authentication → Sign In / Providers → Email** →
+apagar **"Confirm email"**.
 
-Al registrarse, toda cuenta nueva entra como **"alumno"** por default (o
-"profe" si elige esa opción al crear la cuenta) — nadie se puede dar a sí
-mismo el rol de dueño, ni siquiera Millán. Después de que Millán se
-registre normalmente desde la app, promovelo a mano:
+### 4. Aviso por email de los check-ins / check-outs
 
-1. Supabase → **Table Editor** → tabla **perfiles**.
-2. Buscá la fila con su correo.
-3. Editá la columna **rol** → cambiala a `dueño` (con la ñ).
-4. Guardá.
+Ver `assets/js/config.js` (Access Key gratis de web3forms.com con el correo de Millán).
 
-La próxima vez que Millán entre (o recargue), va a ver la sección
-"Dueños" en el menú. El resto de las cuentas (profes y alumnos/papás)
-no la ven — y si escriben la URL a mano, la app les muestra "acceso
-restringido".
+### 5. Cobrar con Mercado Pago
 
-⚠️ **Importante — lo que todavía NO distingue por rol:** hoy "profe" y
-"alumno" ven exactamente el mismo panel (alumnos, agenda, pagos, etc.),
-porque esos datos todavía viven en el navegador de cada uno, no en
-Supabase — separarlos de verdad (que un alumno solo vea sus propios
-datos) es la siguiente etapa. Por ahora, tratá el link de registro como
-algo que compartís con gente de confianza, no como un botón público del
-sitio.
+Crear un **Link de pago** por plan en Mercado Pago (Cobrar → Link de pago, con el
+precio real) y pegarlo en `assets/js/planes.js`, en el `linkPago` del plan. Los
+planes sin link mandan a la inscripción manual.
 
-### Qué quedó conectado a Supabase (comparte datos entre celulares) vs. qué sigue local
+## App Store y Google Play
 
-- ✅ **Solicitudes de clase de prueba** e **Inscripciones** — ya viven en
-  Supabase. Cualquiera que llene esos formularios (con o sin cuenta) y
-  cualquier miembro del staff logueado (desde cualquier celular) ve lo
-  mismo.
-- 🔒 **Todo el resto del panel** (alumnos, bitácora, agenda, pagos,
-  check-ins, objetivos de profes) ahora **requiere haber iniciado
-  sesión**, pero los datos en sí siguen guardados en el navegador de
-  quien los carga — todavía no están compartidos. Es la siguiente parte
-  de la migración.
-- 💬 **Chat**: sigue siendo solo una vista previa.
+La app web se puede empaquetar para las tiendas (por ejemplo con Capacitor) sin
+reescribirla. Lo que hay que tener en cuenta:
+
+- **Apple** pide cuenta de desarrollador (**99 USD/año**), un Mac con Xcode para
+  compilar, y suele rechazar apps que son "solo una página web": conviene que
+  tenga funciones propias (notificaciones, cámara, etc.).
+- **Google Play** pide cuenta (**25 USD, pago único**) y es más flexible.
+- Antes de eso, primero se hace instalable como **PWA** (ícono en la pantalla de
+  inicio), que ya da mucho de la experiencia de app.
+
+Los pagos dentro de la app tienen reglas de las tiendas (Apple/Google cobran
+comisión por compras digitales dentro de la app); las clases presenciales y
+servicios físicos suelen quedar fuera de esa regla, pero conviene revisarlo antes
+de publicar.
+
+## Lo que sigue
+
+- **Chat real** por categoría y mensajes directos a un profe (hoy es vista previa).
+- Suscripción con cobro automático (domiciliación) vía Mercado Pago.
+- PWA / empaquetado para tiendas.
 
 ## Actualizar el sitio
 

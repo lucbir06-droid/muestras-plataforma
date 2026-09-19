@@ -3,3 +3,6 @@
 *.pdf
 .DS_Store
 Thumbs.db
+
+# archivos de prueba locales
+app/_*
