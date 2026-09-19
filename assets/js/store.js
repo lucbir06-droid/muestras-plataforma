@@ -207,6 +207,12 @@ export const Store = {
     if (error) throw error;
     await cargar("perfiles");
   },
+  // solo el dueño puede cambiar el rol de una cuenta (lo exige la base de datos)
+  async cambiarRol(id, rol) {
+    const { error } = await sb.from("perfiles").update({ rol }).eq("id", id);
+    if (error) throw error;
+    await cargar("perfiles");
+  },
 
   /* ---- bitácora / reportes ---- */
   bitacoraDe(alumnoId) {

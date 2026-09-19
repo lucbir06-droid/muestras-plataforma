@@ -53,12 +53,23 @@ página no puede leer datos de otros.
 No depende de que el correo esté confirmado, así que nadie puede "adivinar"
 el correo de otra familia para ver sus datos.
 
-### Cómo se aprueba a un profe
+### Cómo se elige el rol al registrarse
 
-Quien se registra como profe entra **como alumno** y queda pendiente. El dueño
-lo ve en **Panel → "Profes por aprobar"** (o en la sección Dueños) y lo aprueba
-con un botón. Después, en la ficha de cada alumno, el dueño elige qué profe lo
-tiene a cargo; cada profe ve solo a los suyos (y a los "sin asignar").
+Al crear la cuenta, cada persona elige **"Soy…"**:
+
+| Elige | Qué pasa |
+|---|---|
+| **Alumno o papá/mamá** | Entra al instante como alumno. Liga a su alumno con el código de la ficha. |
+| **Profe** | Con el **código de profe** que le dio el dueño entra como profe al instante. Sin código, entra como alumno y queda **pendiente**: el dueño lo aprueba con un botón. |
+| **Dueño** | Solo entra si escribe el **código de dueño**. Sin el código correcto, el registro se rechaza. |
+
+Los códigos evitan que cualquiera se ponga "dueño" desde el sitio y vea las
+finanzas. Se cargan **una sola vez** (ver "Puesta en marcha", paso 2) y **no
+están en este repositorio** porque es público.
+
+El dueño puede cambiar el rol de cualquier cuenta en **Dueños → Cuentas y
+roles**, y en la ficha de cada alumno elige qué profe lo tiene a cargo (cada
+profe ve solo a los suyos y a los "sin asignar").
 
 ## Lo nuevo de esta versión
 
@@ -83,14 +94,31 @@ Se puede volver a correr las veces que haga falta: no borra datos y deja los
 permisos siempre como dice el archivo. **Hay que volver a correrlo cada vez que
 cambie ese archivo** (esta versión lo cambió bastante).
 
-### 2. Registrar a Millán y hacerlo "dueño"
+### 2. Crear los códigos de dueño y de profe (una sola vez)
 
-1. Millán crea su cuenta desde la app (**Crear cuenta**).
-2. Supabase → **Table Editor** → tabla **perfiles** → su fila → columna **rol** →
-   escribir `dueño` (con ñ) → guardar.
-3. Millán recarga la app: ahora ve todo.
+En Supabase → **SQL Editor** → **New query**, pega esto **cambiando los textos por
+códigos que solo tú y Millán conozcan** (largos, con letras y números; no los
+compartas ni los subas a GitHub):
 
-Es el único rol que **no** se puede pedir desde el registro (a propósito).
+```sql
+insert into public.secretos (clave, valor) values
+  ('codigo_dueno', 'CAMBIA-ESTE-CODIGO-DE-DUENO'),
+  ('codigo_profe', 'CAMBIA-ESTE-CODIGO-DE-PROFE')
+on conflict (clave) do update set valor = excluded.valor;
+```
+
+- **Código de dueño**: se lo das solo a quien deba tener acceso total (Millán y, si
+  quieren, Daniel y Eduardo). Sin este código configurado, nadie puede registrarse
+  como dueño.
+- **Código de profe**: se lo das a tus profes para que entren directo. Si prefieres
+  aprobar a cada profe a mano, no lo configures: entrarán como pendientes.
+- Para **cambiar** un código (por ejemplo, si se filtra), corre el mismo SQL con el
+  valor nuevo. Las cuentas que ya existen no se ven afectadas.
+
+Después, Millán abre la app → **Crear cuenta** → **Soy… Dueño** → escribe el código.
+
+(Alternativa manual: registrarse como alumno y, en Table Editor → `perfiles`,
+cambiar `rol` a `dueño` con ñ.)
 
 ### 3. (Opcional) Confirmación de correo
 

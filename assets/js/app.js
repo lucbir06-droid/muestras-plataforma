@@ -295,11 +295,24 @@ function SignupView(errorMsg) {
       ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
       <form id="authForm">
         <div class="field"><label>Nombre completo</label><input name="nombre" required /></div>
-        <div class="field"><label>¿Cómo vas a usar la cuenta?</label>
-          <select name="rol">
-            <option value="alumno">Soy alumno o papá/mamá</option>
-            <option value="profe">Soy profe (el dueño debe aprobar tu cuenta)</option>
+        <div class="field"><label>Soy…</label>
+          <select name="rol" onchange="
+            const f = this.closest('form'), c = f.querySelector('.codigo-extra');
+            c.hidden = this.value === 'alumno';
+            f.elements.codigo.required = this.value === 'dueño';
+            c.querySelector('label').textContent = this.value === 'dueño' ? 'Código de dueño' : 'Código de profe (opcional)';
+            c.querySelector('small').textContent = this.value === 'dueño'
+              ? 'Solo lo conoce el dueño de la academia.'
+              : 'Si no lo tienes, déjalo vacío: el dueño aprobará tu cuenta.';">
+            <option value="alumno">Alumno o papá/mamá</option>
+            <option value="profe">Profe</option>
+            <option value="dueño">Dueño</option>
           </select>
+        </div>
+        <div class="field codigo-extra" hidden>
+          <label>Código de profe (opcional)</label>
+          <input name="codigo" autocomplete="off" />
+          <small style="display:block;margin-top:6px;font-size:.74rem;color:var(--muted);">Si no lo tienes, déjalo vacío: el dueño aprobará tu cuenta.</small>
         </div>
         <div class="field"><label>Correo</label><input name="email" type="email" required autocomplete="username" /></div>
         <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
@@ -343,10 +356,14 @@ function wireAuthForms() {
       // ---- crear cuenta ----
       const { data, error } = await sb.auth.signUp({
         email, password,
-        options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim(), rol: form.rol.value } },
+        options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim(), rol: form.rol.value, codigo: form.codigo.value.trim() } },
       });
       if (error) {
-        showSignup(error.message.includes("already registered") ? "Ese correo ya tiene una cuenta — inicia sesión." : error.message);
+        let msg = error.message;
+        if (msg.includes("already registered")) msg = "Ese correo ya tiene una cuenta — inicia sesión.";
+        // si el trigger rechaza el registro por el código, Supabase solo dice "Database error saving new user"
+        else if (/database error/i.test(msg) && form.rol.value !== "alumno") msg = "El código no es correcto. Pídeselo al dueño de la academia.";
+        showSignup(msg);
         return;
       }
       if (!data.session) {
@@ -1598,6 +1615,36 @@ function Duenos() {
     </div>
 
     <div class="block">
+      <div class="block-head"><h3>Cuentas y roles</h3></div>
+      <p style="font-size:.8rem;color:var(--muted);margin-bottom:12px;max-width:62ch;">
+        Todas las cuentas registradas. Cambia el rol de quien lo necesite: el rol define a qué
+        secciones y datos tiene acceso cada quien.
+      </p>
+      <div class="card scrollx">
+        <table class="tbl">
+          <thead><tr><th>Nombre</th><th>Contacto</th><th>Rol</th><th></th></tr></thead>
+          <tbody>
+            ${Store.perfiles().map((p) => {
+              const yo = p.id === perfil?.id;
+              return `<tr>
+                <td>${esc(p.nombre)}${yo ? ` ${badge("Tú", "muted")}` : ""}${p.rol === "alumno" && p.rolSolicitado === "profe" ? ` ${badge("Pidió ser profe", "warn")}` : ""}</td>
+                <td>${esc(p.telefono || "—")}${p.pais ? ` · ${esc(p.pais)}` : ""}</td>
+                <td colspan="2">
+                  <form data-action="cambiar-rol" data-id="${p.id}" style="display:flex;gap:8px;align-items:center;">
+                    <select name="rol" ${yo ? "disabled" : ""} style="min-width:150px;">
+                      ${[["alumno", "Alumno / papá"], ["profe", "Profe"], ["dueño", "Dueño"]].map(([v, l]) => `<option value="${v}" ${p.rol === v ? "selected" : ""}>${l}</option>`).join("")}
+                    </select>
+                    ${yo ? "" : `<button class="btn btn-ghost btn-sm" type="submit">Guardar</button>`}
+                  </form>
+                </td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="block">
       <div class="block-head"><h3>Todos los alumnos</h3></div>
       <div class="card scrollx">
         ${alumnos.length ? `
@@ -1685,6 +1732,10 @@ view.addEventListener("submit", async (e) => {
       } else {
         toast(`${a.nombre} agregado. Código de vinculación: ${a.codigoVinculo}`);
       }
+    } else if (action === "cambiar-rol") {
+      if (data.rol === "dueño" && !confirm("Un dueño ve todas las finanzas y puede borrar alumnos. ¿Seguro que quieres darle ese rol?")) return;
+      await Store.cambiarRol(form.dataset.id, data.rol);
+      toast("Rol actualizado");
     } else if (action === "asignar-coach") {
       await Store.asignarCoach(form.dataset.alumno, data.coachId);
       toast("Profe asignado");

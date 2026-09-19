@@ -32,26 +32,68 @@ alter table public.perfiles drop constraint if exists perfiles_rol_check;
 alter table public.perfiles add constraint perfiles_rol_check check (rol in ('dueño','profe','alumno'));
 alter table public.perfiles alter column rol set default 'alumno';
 
--- Crea el perfil apenas se registra alguien. TODA cuenta nueva entra
--- como "alumno": quien elige "Soy profe" queda con rol_solicitado =
--- 'profe' y el dueño lo aprueba desde el panel. El rol "dueño" nunca
--- se puede pedir desde el registro (se asigna a mano, ver README).
+-- Códigos secretos para elegir rol al registrarse. Esta tabla NO tiene
+-- ningún permiso para la app (nadie puede leerla desde el navegador);
+-- solo la lee el trigger de abajo. Los códigos se cargan una vez a mano
+-- desde el SQL Editor (ver README) — NO se escriben en este archivo
+-- porque el repositorio es público.
+create table if not exists public.secretos (
+  clave text primary key,
+  valor text not null
+);
+alter table public.secretos enable row level security;
+revoke all on public.secretos from anon, authenticated;
+
+-- Crea el perfil apenas se registra alguien, según el rol que eligió:
+--   alumno → entra como alumno/papá (liga a su alumno con un código).
+--   profe  → si escribe el "código de profe" que le dio el dueño, entra
+--            como profe al instante; si lo deja vacío, entra como alumno
+--            y queda pendiente hasta que el dueño lo apruebe.
+--   dueño  → solo entra si escribe el "código de dueño"; si no coincide
+--            (o no está configurado) el registro se rechaza.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  v_pedido text := new.raw_user_meta_data->>'rol';
+  v_codigo text := nullif(trim(coalesce(new.raw_user_meta_data->>'codigo', '')), '');
+  v_rol text := 'alumno';
+  v_solicitado text := null;
+  v_esperado text;
 begin
+  if v_pedido = 'dueño' then
+    select valor into v_esperado from public.secretos where clave = 'codigo_dueno';
+    if v_esperado is null or v_codigo is distinct from v_esperado then
+      raise exception 'Código de dueño incorrecto';
+    end if;
+    v_rol := 'dueño';
+  elsif v_pedido = 'profe' then
+    if v_codigo is not null then
+      select valor into v_esperado from public.secretos where clave = 'codigo_profe';
+      if v_esperado is null or v_codigo is distinct from v_esperado then
+        raise exception 'Código de profe incorrecto';
+      end if;
+      v_rol := 'profe';
+    else
+      v_solicitado := 'profe';
+    end if;
+  end if;
+
   insert into public.perfiles (id, nombre, telefono, pais, rol, rol_solicitado)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'nombre', split_part(new.email, '@', 1)),
     new.raw_user_meta_data->>'telefono',
     new.raw_user_meta_data->>'pais',
-    'alumno',
-    case when new.raw_user_meta_data->>'rol' = 'profe' then 'profe' else null end
+    v_rol,
+    v_solicitado
   )
   on conflict (id) do nothing;
+
+  -- que el código no quede guardado en los datos de la cuenta
+  update auth.users set raw_user_meta_data = raw_user_meta_data - 'codigo' where id = new.id;
   return new;
 end;
 $$;
