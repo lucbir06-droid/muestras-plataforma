@@ -22,9 +22,9 @@ export const PLANES = [
     nombre: "Polanco",
     moneda: "MXN",
     duraciones: [
-      { id: "mensual", label: "Mensual", tachado: 4149, real: 3349, linkPago: "" },
-      { id: "6meses", label: "6 meses", tachado: 24894, real: 20745, linkPago: "" },
-      { id: "anual", label: "Anual", tachado: 40188, real: 30141, linkPago: "" },
+      { id: "mensual", label: "Mensual", tachado: 4149, real: 3349, linkPago: "https://mpago.li/2kk9Fca" },
+      { id: "6meses", label: "6 meses", tachado: 24894, real: 20745, linkPago: "https://mpago.li/2qMmYjv" },
+      { id: "anual", label: "Anual", tachado: 40188, real: 30141, linkPago: "https://mpago.li/1T7Gi9T" },
     ],
   },
   {
