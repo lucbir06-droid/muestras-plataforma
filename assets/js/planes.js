@@ -34,9 +34,9 @@ export const PLANES = [
     moneda: "MXN",
     destacado: true,
     duraciones: [
-      { id: "mensual", label: "Mensual", tachado: 5149, real: 4300, linkPago: "" },
-      { id: "6meses", label: "6 meses", tachado: 30894, real: 25745, linkPago: "" },
-      { id: "anual", label: "Anual", tachado: 51600, real: 38700, linkPago: "" },
+      { id: "mensual", label: "Mensual", tachado: 5149, real: 4300, linkPago: "https://mpago.li/1SGexnx" },
+      { id: "6meses", label: "6 meses", tachado: 30894, real: 25745, linkPago: "https://mpago.li/2G3pYD5" },
+      { id: "anual", label: "Anual", tachado: 51600, real: 38700, linkPago: "https://mpago.li/215YZfL" },
     ],
   },
   {
@@ -44,9 +44,9 @@ export const PLANES = [
     nombre: "Metepec",
     moneda: "MXN",
     duraciones: [
-      { id: "mensual", label: "Mensual", tachado: 3349, real: 2799, linkPago: "" },
-      { id: "6meses", label: "6 meses", tachado: 20094, real: 13995, linkPago: "" },
-      { id: "anual", label: "Anual", tachado: 40188, real: 30141, linkPago: "" },
+      { id: "mensual", label: "Mensual", tachado: 3349, real: 2799, linkPago: "https://mpago.li/15W5hWm" },
+      { id: "6meses", label: "6 meses", tachado: 20094, real: 13995, linkPago: "https://mpago.li/2BEDfGF" },
+      { id: "anual", label: "Anual", tachado: 40188, real: 30141, linkPago: "https://mpago.li/2w24vPB" },
     ],
   },
 ];
