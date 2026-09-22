@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js";
-import { sb } from "./supabase-client.js";
+import { Store, toYMD } from "./store.js?v=3";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=3";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=3";
+import { sb } from "./supabase-client.js?v=3";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,6 +14,14 @@ import { sb } from "./supabase-client.js";
      profe  → sus alumnos, agenda, asistencia, check-in/out, reportes
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
+
+   Los "?v=3" en los imports de arriba son para que el navegador de
+   quien visita el sitio baje siempre la versión nueva de estos
+   archivos, no una guardada de antes. Cuando edites CUALQUIER .js
+   (este archivo, store.js, config.js, planes.js o
+   supabase-client.js), subí ese número acá y en cada lugar donde
+   aparezca "?v=3" en el proyecto (app/index.html, store.js e
+   index.html también lo usan).
    ========================================================= */
 
 const view = document.getElementById("view");
