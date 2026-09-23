@@ -308,7 +308,7 @@
             <div class="avatar">OM</div>
             <div>
               <div class="coach-name">Óscar Millán</div>
-              <div class="coach-role">Fundador · Ex Potros UAEM</div>
+              <div class="coach-role">Fundador · Entrenador de porteros · Ex Potros UAEM</div>
             </div>
           </div>
           <p>
@@ -355,8 +355,12 @@
       <div class="section-head">
         <span class="eyebrow">Planes y precios</span>
         <h2>Elegí tu sede y tu duración</h2>
+        <p style="margin-top:14px;font-size:.94rem;color:var(--ink-soft);">
+          Reservá tu clase de prueba o creá tu cuenta y te mostramos los precios
+          y planes completos de cada sede.
+        </p>
       </div>
-      <div class="planes-grid" id="planesGrid"><!-- inyectado por planes.js --></div>
+      <div class="planes-grid" id="planesGrid"><!-- inyectado por planes.js (sin precios) --></div>
       <div class="personalizado">
         <div>
           <h3>¿Buscas algo distinto?</h3>
@@ -463,7 +467,11 @@
 </script>
 
 <script type="module">
-  import { PLANES, fmtMXN } from "./assets/js/planes.js?v=3";
+  // Ojo: acá NO se muestran precios a propósito — Millán prefiere que la
+  // gente reserve su clase de prueba o cree cuenta primero, y ahí adentro
+  // (ya con sesión iniciada) es donde se ven los precios reales y se puede
+  // pagar. Los precios completos siguen viviendo en planes.js.
+  import { PLANES } from "./assets/js/planes.js?v=3";
 
   function planCard(plan) {
     return `
@@ -473,19 +481,13 @@
           <h3>${plan.nombre}</h3>
           ${plan.detalle ? `<div class="plan-detalle">${plan.detalle}</div>` : ""}
         </div>
-        ${plan.duraciones.map((d) => `
-          <div class="plan-dur">
-            <div class="dur-label">${d.label}</div>
-            <div class="precios">
-              <span class="tachado">${fmtMXN(d.tachado)}</span>
-              <span class="real">${fmtMXN(d.real)}</span>
-            </div>
-            <a class="btn ${plan.destacado ? "btn-primary" : "btn-ghost"} btn-sm dur-cta"
-               href="${d.linkPago ? d.linkPago : `app/#/inscribirse?plan=${plan.id}&dur=${d.id}`}">
-              Elegir plan
-            </a>
-          </div>
-        `).join("")}
+        <p style="font-size:.86rem;color:var(--ink-soft);margin:0;">
+          Disponible ${plan.duraciones.map((d) => d.label.toLowerCase()).join(" · ")}
+        </p>
+        <a class="btn ${plan.destacado ? "btn-primary" : "btn-ghost"} btn-sm"
+           href="app/#/clases-prueba">
+          Reservar clase de prueba
+        </a>
       </div>`;
   }
 
