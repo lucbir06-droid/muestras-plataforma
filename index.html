@@ -68,6 +68,17 @@
   .section-head h2{font-size:clamp(1.6rem,1.2rem + 1.6vw,2.3rem);}
   .section-head .eyebrow{display:block;margin-bottom:12px;}
 
+  .section-bg{position:relative;overflow:hidden;}
+  .section-bg > .wrap{position:relative;z-index:1;}
+  .section-bg::before{
+    content:"";position:absolute;inset:0;z-index:0;
+    background-image:
+      linear-gradient(180deg,rgba(11,12,12,.93) 0%,rgba(11,12,12,.96) 60%,var(--bg) 100%),
+      var(--bg-photo);
+    background-size:cover;background-position:var(--bg-photo-pos,center 30%);
+    filter:grayscale(.7) contrast(1.05);
+  }
+
   .historia-body{display:grid;gap:36px;grid-template-columns:1fr 1fr;align-items:start;}
   @media (max-width:840px){.historia-body{grid-template-columns:1fr;}}
   .historia-body p{font-size:1rem;color:var(--ink-soft);}
@@ -275,7 +286,7 @@
     </div>
   </section>
 
-  <section id="historia">
+  <section id="historia" class="section-bg" style="--bg-photo:url('assets/img/gallery/familia.jpg');--bg-photo-pos:center 20%;">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">Nuestra historia</span>
@@ -303,7 +314,7 @@
     </div>
   </section>
 
-  <section id="entrenadores">
+  <section id="entrenadores" class="section-bg" style="--bg-photo:url('assets/img/gallery/equipo-porteros.jpg');--bg-photo-pos:center 35%;">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">El equipo</span>
@@ -362,7 +373,7 @@
     </div>
   </section>
 
-  <section id="metodologia">
+  <section id="metodologia" class="section-bg" style="--bg-photo:url('assets/img/gallery/calentamiento.jpg');--bg-photo-pos:center 20%;">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">Metodología</span>
@@ -424,7 +435,7 @@
     </div>
   </section>
 
-  <section id="planes">
+  <section id="planes" class="section-bg" style="--bg-photo:url('assets/img/gallery/concentracion.jpg');--bg-photo-pos:center 25%;">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">Planes y precios</span>
@@ -445,7 +456,7 @@
     </div>
   </section>
 
-  <section id="sedes">
+  <section id="sedes" class="section-bg" style="--bg-photo:url('assets/img/gallery/seleccion.jpg');--bg-photo-pos:center 30%;">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">Dónde entrenamos</span>
@@ -464,7 +475,7 @@
     </div>
   </section>
 
-  <section class="cta-final" style="border-top:0;">
+  <section class="cta-final section-bg" style="border-top:0;--bg-photo:url('assets/img/gallery/campeones.jpg');--bg-photo-pos:center 25%;">
     <div class="mesh" aria-hidden="true">
       <svg viewBox="0 0 1200 400" width="1200" height="400" style="left:50%;top:-120px;transform:translateX(-50%);">
         <g fill="none" stroke="#7CC26B" stroke-width="1">
