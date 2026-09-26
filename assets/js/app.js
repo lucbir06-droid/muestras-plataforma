@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=6";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=6";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=6";
-import { sb } from "./supabase-client.js?v=6";
+import { Store, toYMD } from "./store.js?v=7";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=7";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=7";
+import { sb } from "./supabase-client.js?v=7";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=6";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=6" en los imports de arriba son para que el navegador de
+   Los "?v=7" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=6" en el proyecto (app/index.html, store.js e
+   aparezca "?v=7" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -334,20 +334,18 @@ function SignupView(errorMsg) {
           <select name="rol" onchange="
             const f = this.closest('form'), c = f.querySelector('.codigo-extra');
             c.hidden = this.value === 'alumno';
-            f.elements.codigo.required = this.value === 'dueño';
-            c.querySelector('label').textContent = this.value === 'dueño' ? 'Código de dueño' : 'Código de profe (opcional)';
-            c.querySelector('small').textContent = this.value === 'dueño'
-              ? 'Solo lo conoce el dueño de la academia.'
-              : 'Si no lo tienes, déjalo vacío: el dueño aprobará tu cuenta.';">
+            f.elements.codigo.required = this.value !== 'alumno';
+            c.querySelector('label').textContent = this.value === 'dueño' ? 'Código de dueño' : 'Código de profe';
+            c.querySelector('small').textContent = 'Te lo da el dueño de la academia. Sin este código no se puede crear la cuenta.';">
             <option value="alumno">Alumno o papá/mamá</option>
             <option value="profe">Profe</option>
             <option value="dueño">Dueño</option>
           </select>
         </div>
         <div class="field codigo-extra" hidden>
-          <label>Código de profe (opcional)</label>
+          <label>Código de profe</label>
           <input name="codigo" autocomplete="off" />
-          <small style="display:block;margin-top:6px;font-size:.74rem;color:var(--muted);">Si no lo tienes, déjalo vacío: el dueño aprobará tu cuenta.</small>
+          <small style="display:block;margin-top:6px;font-size:.74rem;color:var(--muted);">Te lo da el dueño de la academia. Sin este código no se puede crear la cuenta.</small>
         </div>
         <div class="field"><label>Correo</label><input name="email" type="email" required autocomplete="username" /></div>
         <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>

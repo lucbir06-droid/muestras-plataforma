@@ -59,8 +59,8 @@ Al crear la cuenta, cada persona elige **"Soy…"**:
 
 | Elige | Qué pasa |
 |---|---|
-| **Alumno o papá/mamá** | Entra al instante como alumno. Liga a su alumno con el código de la ficha. |
-| **Profe** | Con el **código de profe** que le dio el dueño entra como profe al instante. Sin código, entra como alumno y queda **pendiente**: el dueño lo aprueba con un botón. |
+| **Alumno o papá/mamá** | Entra al instante como alumno. Lo primero que ve es "reservar clase de prueba" — en cuanto el dueño la confirma, se desbloquea el resto de la app (ver "Cómo se activa una cuenta de alumno" abajo). |
+| **Profe** | Solo entra si escribe el **código de profe** que le dio el dueño. Sin el código correcto, el registro se rechaza (igual que con "Dueño" — ya no existe el modo "queda pendiente de aprobación"). |
 | **Dueño** | Solo entra si escribe el **código de dueño**. Sin el código correcto, el registro se rechaza. |
 
 Los códigos evitan que cualquiera se ponga "dueño" desde el sitio y vea las

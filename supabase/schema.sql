@@ -60,7 +60,6 @@ declare
   v_pedido text := new.raw_user_meta_data->>'rol';
   v_codigo text := nullif(trim(coalesce(new.raw_user_meta_data->>'codigo', '')), '');
   v_rol text := 'alumno';
-  v_solicitado text := null;
   v_esperado text;
 begin
   if v_pedido = 'dueño' then
@@ -70,25 +69,24 @@ begin
     end if;
     v_rol := 'dueño';
   elsif v_pedido = 'profe' then
-    if v_codigo is not null then
-      select valor into v_esperado from public.secretos where clave = 'codigo_profe';
-      if v_esperado is null or v_codigo is distinct from v_esperado then
-        raise exception 'Código de profe incorrecto';
-      end if;
-      v_rol := 'profe';
-    else
-      v_solicitado := 'profe';
+    -- el código de profe ahora es obligatorio (igual que el de dueño): sin
+    -- código correcto, el registro se rechaza. Ya no existe el "queda
+    -- pendiente de aprobación" — así ningún alumno puede terminar con una
+    -- cuenta a medio camino solo por dejar el código vacío.
+    select valor into v_esperado from public.secretos where clave = 'codigo_profe';
+    if v_esperado is null or v_codigo is distinct from v_esperado then
+      raise exception 'Código de profe incorrecto';
     end if;
+    v_rol := 'profe';
   end if;
 
-  insert into public.perfiles (id, nombre, telefono, pais, rol, rol_solicitado)
+  insert into public.perfiles (id, nombre, telefono, pais, rol)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'nombre', split_part(new.email, '@', 1)),
     new.raw_user_meta_data->>'telefono',
     new.raw_user_meta_data->>'pais',
-    v_rol,
-    v_solicitado
+    v_rol
   )
   on conflict (id) do nothing;
 
