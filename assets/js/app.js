@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=4";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=4";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=4";
-import { sb } from "./supabase-client.js?v=4";
+import { Store, toYMD } from "./store.js?v=5";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=5";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=5";
+import { sb } from "./supabase-client.js?v=5";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=4";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=4" en los imports de arriba son para que el navegador de
+   Los "?v=5" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=4" en el proyecto (app/index.html, store.js e
+   aparezca "?v=5" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -428,9 +428,19 @@ async function route() {
     return;
   }
 
-  // ya tiene sesión: la pantalla de login/registro no tiene sentido
+  // ya tiene sesión pero quiere entrar a login/registro: seguro quiere
+  // probar u obtener OTRA cuenta. Antes esto solo rebotaba al panel sin
+  // avisar nada, y parecía que "no pasaba nada" al crear una cuenta nueva
+  // (en realidad nunca se llegaba a mostrar el formulario). Ahora cerramos
+  // la sesión anterior y mostramos el formulario que pidió, con un aviso.
   if (path === "/registro" || path === "/login") {
-    location.hash = "#/";
+    const nombreAnterior = perfil?.nombre || session.user.email;
+    await sb.auth.signOut();
+    session = null; perfil = null; Store.clear();
+    side.style.display = "none";
+    if (eyebrow) eyebrow.textContent = "Millán Academy";
+    const aviso = `Cerramos la sesión de ${nombreAnterior} para que puedas ${path === "/registro" ? "crear una cuenta nueva" : "iniciar con otra cuenta"}.`;
+    if (path === "/registro") showSignup(); else showLogin(null, aviso);
     return;
   }
 
