@@ -15,4 +15,4 @@
    Mientras esto esté vacío, el check-in se sigue guardando en el panel,
    pero no se manda ningún email todavía. */
 
-export const WEB3FORMS_ACCESS_KEY = "";
+export const WEB3FORMS_ACCESS_KEY = "dede416c-8de3-45a0-bcb1-54f71f667232";
