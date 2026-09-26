@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=5";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=5";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=5";
-import { sb } from "./supabase-client.js?v=5";
+import { Store, toYMD } from "./store.js?v=6";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=6";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=6";
+import { sb } from "./supabase-client.js?v=6";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=5";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=5" en los imports de arriba son para que el navegador de
+   Los "?v=6" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=5" en el proyecto (app/index.html, store.js e
+   aparezca "?v=6" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -596,10 +596,10 @@ function PanelAlumno() {
     : "";
   const errorPerfil = perfilError
     ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:20px;"><b>No pudimos cargar tu perfil.</b> Avísale a la academia.</div>` : "";
-  if (!alumnos.length) return errorPerfil + aviso + VincularAlumno();
+  if (!alumnos.length) return errorPerfil + aviso + AlumnoSinAlumno();
   return errorPerfil + aviso + alumnos.map(resumenAlumno).join("") + `
-    <div class="block"><p style="font-size:.8rem;color:var(--muted);">¿Tienes otro hijo en la academia? Vincúlalo con su código:</p>
-      <div style="margin-top:10px;">${VincularAlumno()}</div></div>`;
+    <div class="block"><p style="font-size:.8rem;color:var(--muted);">¿Tienes otro hijo en la academia?</p>
+      <a class="btn btn-ghost btn-sm" style="margin-top:10px;" href="#/clases-prueba">Pedir su clase de prueba</a></div>`;
 }
 
 function resumenAlumno(a) {
@@ -636,7 +636,7 @@ function resumenAlumno(a) {
 
 function MiSuscripcion() {
   const alumnos = Store.alumnos();
-  if (!alumnos.length) return VincularAlumno();
+  if (!alumnos.length) return AlumnoSinAlumno();
   return alumnos.map((a) => {
     const sus = estadoSuscripcion(a.id);
     const pagos = Store.pagos().filter((p) => p.alumnoId === a.id);
@@ -947,7 +947,7 @@ function Asistencia() {
 function Evidencias() {
   const alumnos = Store.alumnos();
   const evidencias = Store.evidencias();
-  if (!alumnos.length && esAlumno()) return VincularAlumno();
+  if (!alumnos.length && esAlumno()) return AlumnoSinAlumno();
   return `
     <div class="block">
       <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
@@ -1295,15 +1295,11 @@ function slotRow(r) {
 
 /* ---------------- clases de prueba ---------------- */
 
-function ClasesPrueba() {
-  const solicitudes = Store.solicitudes();
-  const staff = esStaff();
+function SolicitudForm(titulo, bajada) {
   return `
     <div class="block">
-      <div class="block-head"><h3>Pedir una clase de prueba</h3></div>
-      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
-        Llena el formulario y la academia te contacta para confirmar día y hora.
-      </p>
+      <div class="block-head"><h3>${esc(titulo)}</h3></div>
+      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">${esc(bajada)}</p>
       <form class="card" data-action="add-solicitud">
         <div class="field-row">
           <div class="field"><label>Nombre del jugador</label><input name="nombre" required placeholder="Nombre y apellido" /></div>
@@ -1322,8 +1318,40 @@ function ClasesPrueba() {
         <div class="field"><label>Mensaje</label><textarea name="mensaje" placeholder="Categoría, disponibilidad, algo que debamos saber..."></textarea></div>
         <button class="btn btn-primary btn-sm" type="submit">Enviar solicitud</button>
       </form>
-    </div>
+    </div>`;
+}
 
+// alumno/papá sin ningún alumno ligado todavía: en vez de pedirle un código,
+// lo mandamos derecho a reservar su clase de prueba. En cuanto el dueño la
+// confirma, se crea el alumno y se liga esta cuenta sola — ahí se desbloquea
+// el resto de la app (agenda, evidencias, chat, suscripción).
+function AlumnoSinAlumno() {
+  const misSolicitudes = Store.solicitudes().filter((s) => s.userId === perfil?.id);
+  const pendiente = misSolicitudes.find((s) => s.estado === "pendiente");
+  const rechazada = !pendiente && misSolicitudes.some((s) => s.estado === "rechazada");
+
+  if (pendiente) {
+    return `<div class="mp-note">
+      <b>Tu solicitud de clase de prueba está en revisión.</b> En cuanto la academia la confirme
+      vas a poder ver tu agenda, subir evidencias, usar el chat y todo lo demás.
+    </div>`;
+  }
+  const aviso = rechazada
+    ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:18px;">
+        Tu solicitud anterior no fue confirmada. Puedes mandar una nueva.
+      </div>`
+    : "";
+  return aviso + SolicitudForm(
+    "Reserva tu clase de prueba",
+    "Para activar tu cuenta (agenda, evidencias, chat, suscripción) primero pide tu clase de prueba. En cuanto la academia la confirme, se desbloquea todo.",
+  );
+}
+
+function ClasesPrueba() {
+  const solicitudes = Store.solicitudes();
+  const staff = esStaff();
+  return `
+    ${SolicitudForm("Pedir una clase de prueba", "Llena el formulario y la academia te contacta para confirmar día y hora.")}
     <div class="block">
       <div class="block-head"><h3>${staff ? "Solicitudes recibidas" : "Mis solicitudes"}</h3></div>
       <div class="list">
@@ -1354,7 +1382,7 @@ function solicitudFull(s) {
 
 function Reportes() {
   const alumnos = Store.alumnos();
-  if (!alumnos.length && esAlumno()) return VincularAlumno();
+  if (!alumnos.length && esAlumno()) return AlumnoSinAlumno();
   return `
     <div class="list">
       ${alumnos.length ? alumnos.map((a) => {
@@ -1828,7 +1856,7 @@ function Chat(fullPath) {
   const query = fullPath.includes("?") ? fullPath.split("?")[1] : "";
   const params = new URLSearchParams(query);
   const alumnos = Store.alumnos();
-  if (esAlumno() && !alumnos.length) return VincularAlumno();
+  if (esAlumno() && !alumnos.length) return AlumnoSinAlumno();
 
   const tabParam = params.get("tab") || Store.CATEGORIAS[0];
   const activeCategoria = Store.CATEGORIAS.includes(tabParam) ? tabParam : null;
@@ -1960,8 +1988,14 @@ view.addEventListener("click", async (e) => {
   try {
     const solicitudBtn = e.target.closest("[data-action='solicitud-estado']");
     if (solicitudBtn) {
-      await Store.actualizarSolicitud(solicitudBtn.dataset.id, solicitudBtn.dataset.estado);
-      toast(solicitudBtn.dataset.estado === "confirmada" ? "Solicitud confirmada" : "Solicitud rechazada");
+      if (solicitudBtn.dataset.estado === "confirmada") {
+        const s = Store.solicitudes().find((x) => x.id === solicitudBtn.dataset.id);
+        const a = await Store.confirmarSolicitud(s);
+        toast(`Clase confirmada — se dio de alta a ${a.nombre} y ya tiene acceso a la app`);
+      } else {
+        await Store.actualizarSolicitud(solicitudBtn.dataset.id, solicitudBtn.dataset.estado);
+        toast("Solicitud rechazada");
+      }
       return render();
     }
     const inscripcionBtn = e.target.closest("[data-action='inscripcion-estado']");

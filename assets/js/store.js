@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=5";
+import { sb } from "./supabase-client.js?v=6";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -103,7 +103,7 @@ const mapEvidencia = (r) => ({
 });
 const mapSolicitud = (r) => ({
   id: r.id, nombre: r.nombre, edad: r.edad, telefono: r.telefono, pais: r.pais, zona: r.zona, sede: r.sede,
-  mensaje: r.mensaje, estado: r.estado, fecha: r.fecha,
+  mensaje: r.mensaje, estado: r.estado, fecha: r.fecha, userId: r.user_id,
 });
 const mapInscripcion = (r) => ({
   id: r.id, nombre: r.nombre, telefono: r.telefono, planId: r.plan_id, duracionId: r.duracion_id,
@@ -290,6 +290,22 @@ export const Store = {
     const { error } = await sb.from("solicitudes").update({ estado }).eq("id", id);
     if (error) throw error;
     await cargar("solicitudes");
+  },
+  // el dueño confirma la clase de prueba: esto da de alta al alumno con los
+  // datos de la solicitud y liga la cuenta que la mandó — así se desbloquea
+  // toda la app para esa cuenta sin tener que pedirle ningún código.
+  async confirmarSolicitud(s) {
+    const [fila] = await insertar("alumnos", {
+      nombre: s.nombre, sede: s.sede, telefono: s.telefono || null, avatar: iniciales(s.nombre),
+    });
+    if (s.userId) {
+      const { error } = await sb.from("alumno_usuarios").insert({ alumno_id: fila.id, user_id: s.userId });
+      if (error) throw error;
+    }
+    const { error: errEstado } = await sb.from("solicitudes").update({ estado: "confirmada" }).eq("id", s.id);
+    if (errEstado) throw errEstado;
+    await Promise.all(["alumnos", "solicitudes"].map(cargar));
+    return mapAlumno(fila);
   },
 
   /* ---- inscripciones ---- */

@@ -430,6 +430,11 @@ create policy "alumnos baja" on public.alumnos for delete to authenticated
 
 create policy "vinculos ver" on public.alumno_usuarios for select to authenticated
   using (user_id = auth.uid() or public.es_dueno());
+-- el dueño liga cuentas a alumnos directamente (por ejemplo al confirmar una
+-- solicitud de clase de prueba); el código de vinculación sigue existiendo
+-- para casos manuales, pero ya no hace falta para el flujo normal.
+create policy "vinculos crear" on public.alumno_usuarios for insert to authenticated
+  with check (public.es_dueno());
 create policy "vinculos baja" on public.alumno_usuarios for delete to authenticated
   using (public.es_dueno());
 
