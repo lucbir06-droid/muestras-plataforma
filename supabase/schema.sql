@@ -331,6 +331,29 @@ create table if not exists public.evidencias (
 alter table public.evidencias add column if not exists alumno_id uuid references public.alumnos(id) on delete cascade;
 alter table public.evidencias add column if not exists user_id uuid default auth.uid();
 
+-- Chat: canales por categoría (1ra/2da/3ra/4ta división, abiertos a toda la
+-- academia) y mensajes directos alumno/papá <-> profe (sobre un alumno puntual).
+-- El nombre y rol del autor se guardan en el mensaje (igual que en checkins/
+-- evidencias) porque un alumno no tiene permiso para leer los perfiles de
+-- otras personas, así que no podría "buscar" el nombre de quien escribió.
+create table if not exists public.mensajes (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null check (tipo in ('categoria', 'directo')),
+  categoria text,
+  profe_id uuid references public.perfiles(id) on delete cascade,
+  alumno_id uuid references public.alumnos(id) on delete cascade,
+  autor_id uuid not null references public.perfiles(id),
+  autor_nombre text not null,
+  autor_rol text not null,
+  contenido text not null,
+  creado_en timestamptz not null default now(),
+  constraint mensajes_forma check (
+    (tipo = 'categoria' and categoria is not null and profe_id is null and alumno_id is null)
+    or
+    (tipo = 'directo' and profe_id is not null and alumno_id is not null and categoria is null)
+  )
+);
+
 -- Contacto para plan personalizado y configuración
 create table if not exists public.contactos (
   id uuid primary key default gen_random_uuid(),
@@ -499,6 +522,25 @@ create policy "evidencias crear" on public.evidencias for insert to authenticate
   with check (user_id = auth.uid() and (alumno_id is null or public.puede_ver_alumno(alumno_id)));
 create policy "evidencias borrar" on public.evidencias for delete to authenticated
   using (public.es_staff());
+
+-- chat: los canales por categoría los ve y escribe cualquiera con sesión;
+-- los mensajes directos solo los ve el profe del hilo, el dueño, o quien
+-- pueda ver a ese alumno (el papá/alumno ligado, o su profe asignado).
+alter table public.mensajes enable row level security;
+create policy "mensajes categoria ver" on public.mensajes for select to authenticated
+  using (tipo = 'categoria');
+create policy "mensajes categoria escribir" on public.mensajes for insert to authenticated
+  with check (tipo = 'categoria' and autor_id = auth.uid());
+create policy "mensajes directo ver" on public.mensajes for select to authenticated
+  using (
+    tipo = 'directo'
+    and (public.es_dueno() or profe_id = auth.uid() or public.puede_ver_alumno(alumno_id))
+  );
+create policy "mensajes directo escribir" on public.mensajes for insert to authenticated
+  with check (
+    tipo = 'directo' and autor_id = auth.uid()
+    and (profe_id = auth.uid() or public.puede_ver_alumno(alumno_id))
+  );
 
 -- solo el dueño toca contactos y configuración
 create policy "contactos dueno" on public.contactos for all to authenticated

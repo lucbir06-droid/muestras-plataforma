@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=3";
+import { sb } from "./supabase-client.js?v=4";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -68,7 +68,7 @@ function proximaFecha(diaNombre, semanasAdelante) {
 /* ---------------- copia en memoria + cargadores ---------------- */
 const C = {
   alumnos: [], bitacora: [], reservas: [], pagos: [], checkins: [], asistencias: [],
-  evidencias: [], solicitudes: [], inscripciones: [], objetivos: [], perfiles: [],
+  evidencias: [], solicitudes: [], inscripciones: [], objetivos: [], perfiles: [], mensajes: [],
 };
 
 const urlFoto = (bucket, path) => (path ? sb.storage.from(bucket).getPublicUrl(path).data.publicUrl : null);
@@ -112,6 +112,10 @@ const mapInscripcion = (r) => ({
 });
 const mapObjetivo = (r) => ({ id: r.id, categoria: r.categoria, profe: r.profe, titulo: r.titulo, detalle: r.detalle, fecha: r.fecha });
 const mapPerfil = (r) => ({ id: r.id, nombre: r.nombre, telefono: r.telefono, pais: r.pais, rol: r.rol, rolSolicitado: r.rol_solicitado });
+const mapMensaje = (r) => ({
+  id: r.id, tipo: r.tipo, categoria: r.categoria, profeId: r.profe_id, alumnoId: r.alumno_id,
+  autorId: r.autor_id, autorNombre: r.autor_nombre, autorRol: r.autor_rol, contenido: r.contenido, fecha: r.creado_en,
+});
 
 const TABLAS = {
   alumnos:       { tabla: "alumnos",             orden: ["alta", false],   map: mapAlumno },
@@ -125,6 +129,7 @@ const TABLAS = {
   inscripciones: { tabla: "inscripciones",       orden: ["fecha", false],  map: mapInscripcion },
   objetivos:     { tabla: "objetivos_categoria", orden: ["fecha", false],  map: mapObjetivo },
   perfiles:      { tabla: "perfiles",            orden: ["creado_en", true], map: mapPerfil },
+  mensajes:      { tabla: "mensajes",            orden: ["creado_en", true], map: mapMensaje },
 };
 
 async function cargar(clave) {
@@ -352,6 +357,24 @@ export const Store = {
     }
     await insertar("evidencias", { alumno_id: alumnoId, alumno_nombre: alumnoNombre, tipo, comentario, foto_path: fotoPath });
     await cargar("evidencias");
+  },
+
+  /* ---- chat (canales por categoría + mensajes directos con un profe) ---- */
+  mensajesCategoria(categoria) {
+    return C.mensajes.filter((m) => m.tipo === "categoria" && m.categoria === categoria)
+      .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+  },
+  mensajesDirectos(alumnoId, profeId) {
+    return C.mensajes.filter((m) => m.tipo === "directo" && m.alumnoId === alumnoId && m.profeId === profeId)
+      .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+  },
+  async enviarMensajeCategoria(categoria, contenido, autorId, autorNombre, autorRol) {
+    await insertar("mensajes", { tipo: "categoria", categoria, contenido, autor_id: autorId, autor_nombre: autorNombre, autor_rol: autorRol });
+    await cargar("mensajes");
+  },
+  async enviarMensajeDirecto(alumnoId, profeId, contenido, autorId, autorNombre, autorRol) {
+    await insertar("mensajes", { tipo: "directo", alumno_id: alumnoId, profe_id: profeId, contenido, autor_id: autorId, autor_nombre: autorNombre, autor_rol: autorRol });
+    await cargar("mensajes");
   },
 
   /* ---- configuración local (punto de equilibrio) ---- */

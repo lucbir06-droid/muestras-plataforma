@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=3";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=3";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=3";
-import { sb } from "./supabase-client.js?v=3";
+import { Store, toYMD } from "./store.js?v=4";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=4";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=4";
+import { sb } from "./supabase-client.js?v=4";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=3";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=3" en los imports de arriba son para que el navegador de
+   Los "?v=4" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=3" en el proyecto (app/index.html, store.js e
+   aparezca "?v=4" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -229,7 +229,7 @@ function render() {
     html = Duenos();
   } else if (path === "/chat") {
     title = "Chat";
-    html = Chat();
+    html = Chat(currentFullPath());
   } else {
     title = "No encontrado";
     html = `<div class="empty">No encontramos esa página. <a href="#/" style="color:var(--accent-2)">Volver al panel</a>.</div>`;
@@ -238,6 +238,29 @@ function render() {
   pageTitle.textContent = title;
   view.innerHTML = html;
   window.scrollTo(0, 0);
+
+  if (path === "/chat") {
+    iniciarPollChat();
+    const box = document.getElementById("chatMessages");
+    if (box) box.scrollTop = box.scrollHeight;
+  } else {
+    detenerPollChat();
+  }
+}
+
+// mientras estás en /chat, revisa cada pocos segundos si hay mensajes nuevos
+// (sin esto, el chat solo se actualizaría al mandar vos un mensaje)
+let chatPollId = null;
+function iniciarPollChat() {
+  if (chatPollId) return;
+  chatPollId = setInterval(async () => {
+    if (currentPath() !== "/chat" || !session) return detenerPollChat();
+    await Store.recargar("mensajes");
+    if (currentPath() === "/chat") render();
+  }, 6000);
+}
+function detenerPollChat() {
+  if (chatPollId) { clearInterval(chatPollId); chatPollId = null; }
 }
 
 function renderNav(path) {
@@ -261,14 +284,18 @@ function renderNav(path) {
 /* ---------------- login / registro / sesión ---------------- */
 
 // trae el perfil (y sobre todo el rol) de quien está logueado
+let perfilPedidoId = 0; // evita que una respuesta vieja (de otra cuenta) pise a la más nueva
 async function cargarPerfil() {
   if (!session) { perfil = null; return; }
   if (perfil && perfil.id === session.user.id) return;
-  const { data, error } = await sb.from("perfiles").select("*").eq("id", session.user.id).maybeSingle();
+  const usuario = session.user.id;
+  const miPedido = ++perfilPedidoId;
+  const { data, error } = await sb.from("perfiles").select("*").eq("id", usuario).maybeSingle();
+  if (miPedido !== perfilPedidoId) return; // llegó tarde: ya hay una cuenta más nueva cargando/cargada
   perfilError = !!error || !data;
   perfil = data
     ? { id: data.id, nombre: data.nombre, rol: data.rol, rolSolicitado: data.rol_solicitado }
-    : { id: session.user.id, nombre: session.user.email, rol: "alumno", rolSolicitado: null };
+    : { id: usuario, nombre: session.user.email, rol: "alumno", rolSolicitado: null };
 }
 
 function AuthShell(mode, inner) {
@@ -1677,27 +1704,135 @@ function Duenos() {
 
 /* ---------------- chat (vista previa) ---------------- */
 
-function Chat() {
+function fmtHora(fecha) {
+  return new Date(fecha).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+}
+
+function ChatMensajeBubble(m) {
+  const mio = m.autorId === perfil?.id;
+  const etiquetaRol = m.autorRol === "dueño" ? " · Dueño" : m.autorRol === "profe" ? " · Profe" : "";
   return `
-    <div class="mp-note" style="margin-bottom:22px;">
-      <b>Vista previa — todavía no envía mensajes de verdad.</b> El chat en vivo (canales por
-      categoría + mensajes directos a un profe) es la siguiente etapa. Así se va a ver:
-    </div>
-    <div class="stats">
-      ${Store.CATEGORIAS.map((c) => `
-        <div class="card stat" style="text-align:left;">
-          <span class="l">${icon("i-chat")} Canal de categoría</span>
-          <span class="n" style="font-size:1.05rem;margin-top:6px;">${esc(c)}</span>
-        </div>`).join("")}
-    </div>
-    <div class="block">
-      <div class="block-head"><h3>Mensajes directos</h3></div>
-      <p style="font-size:.86rem;color:var(--muted);max-width:60ch;">
-        Además de los 4 canales por categoría, cada alumno o papá va a poder mandarle un
-        mensaje privado a un profe en particular, visible solo para ese profe y el dueño.
-      </p>
-    </div>
-  `;
+    <div class="chat-msg ${mio ? "mio" : ""}">
+      <div class="chat-msg-meta">${esc(m.autorNombre)}${mio ? "" : etiquetaRol}</div>
+      <div class="chat-msg-bubble">${esc(m.contenido)}</div>
+      <div class="chat-msg-hora">${fmtHora(m.fecha)}</div>
+    </div>`;
+}
+
+function ChatCategoria(categoria) {
+  const msgs = Store.mensajesCategoria(categoria);
+  return `
+    <div class="chat-panel">
+      <div class="chat-messages" id="chatMessages">
+        ${msgs.length ? msgs.map(ChatMensajeBubble).join("") : `<div class="empty">Todavía no hay mensajes en este canal — ¡sé el primero en escribir!</div>`}
+      </div>
+      <form data-action="mensaje-categoria" class="chat-form">
+        <input type="hidden" name="categoria" value="${esc(categoria)}" />
+        <input name="contenido" placeholder="Escribe un mensaje…" required autocomplete="off" />
+        <button class="btn btn-primary btn-sm" type="submit">Enviar</button>
+      </form>
+    </div>`;
+}
+
+function ChatDMStaff(params) {
+  const yo = perfil.id;
+  const soyDueno = esDueno();
+  const alumnoId = params.get("alumno") || "";
+  const profeId = params.get("profe") || (soyDueno ? "" : yo);
+  const alumnos = Store.alumnos();
+  const coaches = Store.coaches();
+  const alumno = alumnoId ? Store.alumno(alumnoId) : null;
+
+  const nav = soyDueno
+    ? `location.hash='#/chat?tab=dm&alumno='+document.getElementById('selAlumno').value+'&profe='+(document.getElementById('selProfe').value||'')`
+    : `location.hash='#/chat?tab=dm&alumno='+document.getElementById('selAlumno').value+'&profe=${yo}'`;
+
+  const picker = `
+    <div class="chat-dm-picker">
+      <div class="field"><label>Alumno</label>
+        <select id="selAlumno" onchange="${nav}">
+          <option value="">Elegir…</option>
+          ${alumnos.map((a) => `<option value="${a.id}" ${a.id === alumnoId ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}
+        </select>
+      </div>
+      ${soyDueno ? `
+      <div class="field"><label>Profe</label>
+        <select id="selProfe" onchange="${nav}">
+          <option value="">Elegir…</option>
+          ${coaches.map((c) => `<option value="${c.id}" ${c.id === profeId ? "selected" : ""}>${esc(c.nombre)}</option>`).join("")}
+        </select>
+      </div>` : ""}
+    </div>`;
+
+  if (!alumno || !profeId) {
+    return picker + `<div class="empty" style="margin-top:16px;">Elige un alumno${soyDueno ? " y un profe" : ""} para ver la conversación.</div>`;
+  }
+
+  const msgs = Store.mensajesDirectos(alumnoId, profeId);
+  return picker + `
+    <div class="chat-panel" style="margin-top:16px;">
+      <div class="chat-messages" id="chatMessages">
+        ${msgs.length ? msgs.map(ChatMensajeBubble).join("") : `<div class="empty">Todavía no hay mensajes con ${esc(alumno.nombre)}.</div>`}
+      </div>
+      <form data-action="mensaje-directo" class="chat-form">
+        <input type="hidden" name="alumnoId" value="${alumnoId}" />
+        <input type="hidden" name="profeId" value="${profeId}" />
+        <input name="contenido" placeholder="Escribe un mensaje…" required autocomplete="off" />
+        <button class="btn btn-primary btn-sm" type="submit">Enviar</button>
+      </form>
+    </div>`;
+}
+
+function ChatDMAlumno(alumnos, params) {
+  const alumnoId = params.get("alumno") || alumnos[0]?.id || "";
+  const alumno = Store.alumno(alumnoId);
+  if (!alumno) return `<div class="empty">No encontramos a tu alumno vinculado.</div>`;
+  if (!alumno.coachId) {
+    return `<div class="empty">${esc(alumno.nombre)} todavía no tiene profe asignado — en cuanto la academia le asigne uno vas a poder escribirle acá.</div>`;
+  }
+  const picker = alumnos.length > 1 ? `
+    <div class="chat-dm-picker">
+      <div class="field"><label>Alumno</label>
+        <select onchange="location.hash='#/chat?tab=dm&alumno='+this.value">
+          ${alumnos.map((a) => `<option value="${a.id}" ${a.id === alumnoId ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}
+        </select>
+      </div>
+    </div>` : "";
+  const msgs = Store.mensajesDirectos(alumnoId, alumno.coachId);
+  return picker + `
+    <div class="chat-panel" style="${picker ? "margin-top:16px;" : ""}">
+      <p style="font-size:.82rem;color:var(--muted);margin:0 0 10px;">Conversación con ${esc(alumno.coach || "tu profe")}</p>
+      <div class="chat-messages" id="chatMessages">
+        ${msgs.length ? msgs.map(ChatMensajeBubble).join("") : `<div class="empty">Todavía no hay mensajes. ¡Escríbele a ${esc(alumno.coach || "tu profe")}!</div>`}
+      </div>
+      <form data-action="mensaje-directo" class="chat-form">
+        <input type="hidden" name="alumnoId" value="${alumnoId}" />
+        <input type="hidden" name="profeId" value="${alumno.coachId}" />
+        <input name="contenido" placeholder="Escribe un mensaje…" required autocomplete="off" />
+        <button class="btn btn-primary btn-sm" type="submit">Enviar</button>
+      </form>
+    </div>`;
+}
+
+function Chat(fullPath) {
+  const query = fullPath.includes("?") ? fullPath.split("?")[1] : "";
+  const params = new URLSearchParams(query);
+  const alumnos = Store.alumnos();
+  if (esAlumno() && !alumnos.length) return VincularAlumno();
+
+  const tabParam = params.get("tab") || Store.CATEGORIAS[0];
+  const activeCategoria = Store.CATEGORIAS.includes(tabParam) ? tabParam : null;
+
+  const tabs = [
+    ...Store.CATEGORIAS.map((c) => `<a href="#/chat?tab=${encodeURIComponent(c)}" class="chat-tab ${c === activeCategoria ? "active" : ""}">${esc(c)}</a>`),
+    `<a href="#/chat?tab=dm" class="chat-tab ${!activeCategoria ? "active" : ""}">Mensajes directos</a>`,
+  ].join("");
+
+  const body = activeCategoria
+    ? ChatCategoria(activeCategoria)
+    : (esStaff() ? ChatDMStaff(params) : ChatDMAlumno(alumnos, params));
+
+  return `<div class="chat-tabs">${tabs}</div>${body}`;
 }
 
 /* ---------------- acciones (delegadas) ---------------- */
@@ -1798,6 +1933,12 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "set-costos-fijos") {
       Store.setCostosFijos(Number(data.costos) || 0);
       toast("Costos fijos actualizados");
+    } else if (action === "mensaje-categoria") {
+      await Store.enviarMensajeCategoria(data.categoria, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);
+      form.reset();
+    } else if (action === "mensaje-directo") {
+      await Store.enviarMensajeDirecto(data.alumnoId, data.profeId, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);
+      form.reset();
     }
   } catch (err) {
     toast(errMsg(err));
