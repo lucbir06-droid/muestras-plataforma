@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=7";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=7";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=7";
-import { sb } from "./supabase-client.js?v=7";
+import { Store, toYMD } from "./store.js?v=8";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=8";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=8";
+import { sb } from "./supabase-client.js?v=8";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=7";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=7" en los imports de arriba son para que el navegador de
+   Los "?v=8" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=7" en el proyecto (app/index.html, store.js e
+   aparezca "?v=8" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -32,6 +32,11 @@ const sidenav = document.getElementById("sidenav");
 let session = null;
 let perfil = null;
 let perfilError = false;
+// true mientras se está mandando el formulario de login/registro. Evita que
+// route() (disparado por onAuthStateChange justo al loguearte) confunda un
+// login recién exitoso con "ya había sesión, quiere cambiar de cuenta" y te
+// vuelva a cerrar la sesión que acabás de abrir.
+let autenticando = false;
 
 const rol = () => perfil?.rol || "alumno";
 const esDueno = () => rol() === "dueño";
@@ -384,30 +389,41 @@ function wireAuthForms() {
     btn.disabled = true;
     const email = form.email.value.trim();
     const password = form.password.value;
+    autenticando = true;
 
-    if (form.elements.nombre) {
-      // ---- crear cuenta ----
-      const { data, error } = await sb.auth.signUp({
-        email, password,
-        options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim(), rol: form.rol.value, codigo: form.codigo.value.trim() } },
-      });
-      if (error) {
-        let msg = error.message;
-        if (msg.includes("already registered")) msg = "Ese correo ya tiene una cuenta — inicia sesión.";
-        // si el trigger rechaza el registro por el código, Supabase solo dice "Database error saving new user"
-        else if (/database error/i.test(msg) && form.rol.value !== "alumno") msg = "El código no es correcto. Pídeselo al dueño de la academia.";
-        showSignup(msg);
-        return;
+    try {
+      if (form.elements.nombre) {
+        // ---- crear cuenta ----
+        const { data, error } = await sb.auth.signUp({
+          email, password,
+          options: { data: { nombre: form.nombre.value.trim(), telefono: form.telefono.value.trim(), pais: form.pais.value.trim(), rol: form.rol.value, codigo: form.codigo.value.trim() } },
+        });
+        if (error) {
+          let msg = error.message;
+          if (msg.includes("already registered")) msg = "Ese correo ya tiene una cuenta — inicia sesión.";
+          // si el trigger rechaza el registro por el código, Supabase solo dice "Database error saving new user"
+          else if (/database error/i.test(msg) && form.rol.value !== "alumno") msg = "El código no es correcto. Pídeselo al dueño de la academia.";
+          showSignup(msg);
+          return;
+        }
+        if (data.session) {
+          // ya quedó logueado: sacamos el hash de /registro para que route()
+          // no lo confunda después con "quiere cambiar de cuenta"
+          location.hash = "#/";
+        } else {
+          showLogin(null, "Cuenta creada. Si te pedimos confirmar el correo, revisa tu bandeja de entrada y después inicia sesión aquí.");
+        }
+      } else {
+        // ---- iniciar sesión ----
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) {
+          showLogin(error.message.includes("Invalid") ? "Correo o contraseña incorrectos." : error.message);
+        } else {
+          location.hash = "#/"; // mismo motivo que arriba
+        }
       }
-      if (!data.session) {
-        showLogin(null, "Cuenta creada. Si te pedimos confirmar el correo, revisa tu bandeja de entrada y después inicia sesión aquí.");
-      }
-      // si ya vino con sesión activa, onAuthStateChange dispara route() solo
-    } else {
-      // ---- iniciar sesión ----
-      const { error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) showLogin(error.message.includes("Invalid") ? "Correo o contraseña incorrectos." : error.message);
-      // si funcionó, onAuthStateChange dispara route() solo
+    } finally {
+      autenticando = false;
     }
   });
 }
@@ -431,7 +447,15 @@ async function route() {
   // avisar nada, y parecía que "no pasaba nada" al crear una cuenta nueva
   // (en realidad nunca se llegaba a mostrar el formulario). Ahora cerramos
   // la sesión anterior y mostramos el formulario que pidió, con un aviso.
+  // "autenticando" evita que esto se dispare por error justo cuando la
+  // sesión que acaba de llegar es la de un login/registro recién exitoso
+  // hecho desde esta misma pantalla (si no, te cerraba la sesión que
+  // acababas de abrir y el login parecía que "no funcionaba").
   if (path === "/registro" || path === "/login") {
+    // ya se está resolviendo un login/registro desde este mismo formulario:
+    // no hay nada que renderizar todavía (el hash está a punto de cambiar
+    // a "#/" solo) — evita mostrar "página no encontrada" de paso.
+    if (autenticando) return;
     const nombreAnterior = perfil?.nombre || session.user.email;
     await sb.auth.signOut();
     session = null; perfil = null; Store.clear();
