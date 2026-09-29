@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=11";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=11";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=11";
-import { sb } from "./supabase-client.js?v=11";
+import { Store, toYMD } from "./store.js?v=12";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=12";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=12";
+import { sb } from "./supabase-client.js?v=12";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=11";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=11" en los imports de arriba son para que el navegador de
+   Los "?v=12" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=11" en el proyecto (app/index.html, store.js e
+   aparezca "?v=12" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1214,6 +1214,14 @@ function AlumnoDetail(id) {
         <div class="field" style="margin:0;"><label>Profe a cargo</label>
           <select name="coachId"><option value="">Sin asignar</option>${Store.coaches().map((c) => `<option value="${c.id}" ${c.id === a.coachId ? "selected" : ""}>${esc(c.nombre)}</option>`).join("")}</select></div>
         <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
+      </form>
+      <form data-action="asignar-categoria" data-alumno="${a.id}" style="display:flex;gap:8px;align-items:flex-end;">
+        <div class="field" style="margin:0;"><label>División</label>
+          <select name="categoria">
+            <option value="">Sin división</option>
+            ${(Store.SEDE_CATEGORIAS[a.sede] || Store.CATEGORIAS).map((c) => `<option ${c === a.categoria ? "selected" : ""}>${esc(c)}</option>`).join("")}
+          </select></div>
+        <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
       </form>` : ""}
     </div>` : ""}
 
@@ -2086,6 +2094,9 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "asignar-coach") {
       await Store.asignarCoach(form.dataset.alumno, data.coachId);
       toast("Profe asignado");
+    } else if (action === "asignar-categoria") {
+      await Store.asignarCategoria(form.dataset.alumno, data.categoria);
+      toast("División actualizada");
     } else if (action === "add-bitacora") {
       await Store.addBitacora({
         alumnoId: form.dataset.alumno, tipo: data.tipo, nota: data.nota.trim(), autor: perfil?.nombre,

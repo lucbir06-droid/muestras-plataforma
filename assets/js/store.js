@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=11";
+import { sb } from "./supabase-client.js?v=12";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -193,6 +193,13 @@ export const Store = {
   async asignarCoach(alumnoId, coachId) {
     const coach = C.perfiles.find((p) => p.id === coachId);
     const { error } = await sb.from("alumnos").update({ coach_id: coachId || null, coach: coach?.nombre || null }).eq("id", alumnoId);
+    if (error) throw error;
+    await cargar("alumnos");
+  },
+  // solo el dueño asigna/cambia la división de un jugador (se controla en
+  // la UI, igual que el profe a cargo — ver AlumnoDetail en app.js)
+  async asignarCategoria(alumnoId, categoria) {
+    const { error } = await sb.from("alumnos").update({ categoria: categoria || null }).eq("id", alumnoId);
     if (error) throw error;
     await cargar("alumnos");
   },

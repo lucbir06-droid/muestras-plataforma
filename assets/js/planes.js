@@ -46,7 +46,7 @@ export const PLANES = [
     duraciones: [
       { id: "mensual", label: "Mensual", tachado: 3349, real: 2799, linkPago: "https://mpago.li/15W5hWm" },
       { id: "6meses", label: "6 meses", tachado: 20094, real: 13995, linkPago: "https://mpago.li/2BEDfGF" },
-      { id: "anual", label: "Anual", tachado: 40188, real: 30141, linkPago: "https://mpago.li/2w24vPB" },
+      { id: "anual", label: "Anual", tachado: 40188, real: 27990, linkPago: "https://mpago.li/1YKNBXR" },
     ],
   },
 ];
