@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=15";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=15";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=15";
-import { sb } from "./supabase-client.js?v=15";
+import { Store, toYMD } from "./store.js?v=16";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=16";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=16";
+import { sb } from "./supabase-client.js?v=16";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=15";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=15" en los imports de arriba son para que el navegador de
+   Los "?v=16" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=15" en el proyecto (app/index.html, store.js e
+   aparezca "?v=16" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -2240,6 +2240,16 @@ view.addEventListener("click", async (e) => {
     if (solicitudBtn) {
       if (solicitudBtn.dataset.estado === "confirmada") {
         const s = Store.solicitudes().find((x) => x.id === solicitudBtn.dataset.id);
+        // si esta misma cuenta ya tiene un alumno con el mismo nombre, seguro
+        // es una solicitud duplicada (se manda dos veces por error) — avisar
+        // antes de crear otro alumno de la nada para la misma persona.
+        const nombreNorm = s.nombre.trim().toLowerCase();
+        const yaExiste = Store.alumnos().some((al) => al.nombre.trim().toLowerCase() === nombreNorm);
+        if (yaExiste && !confirm(
+          `Ya existe un alumno registrado como "${s.nombre}". Si esta solicitud es de la misma persona ` +
+          `(mandada dos veces por error), tocá Cancelar y rechazala en vez de confirmarla.\n\n` +
+          `¿Confirmar de todas formas y dar de alta a otro alumno con el mismo nombre?`
+        )) return render();
         const a = await Store.confirmarSolicitud(s);
         toast(`Clase confirmada — se dio de alta a ${a.nombre} y ya tiene acceso a la app`);
       } else {
