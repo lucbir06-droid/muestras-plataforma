@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=13";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=13";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=13";
-import { sb } from "./supabase-client.js?v=13";
+import { Store, toYMD } from "./store.js?v=14";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=14";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=14";
+import { sb } from "./supabase-client.js?v=14";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=13";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=13" en los imports de arriba son para que el navegador de
+   Los "?v=14" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=13" en el proyecto (app/index.html, store.js e
+   aparezca "?v=14" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1249,6 +1249,19 @@ function AlumnoDetail(id) {
             ${(Store.SEDE_CATEGORIAS[a.sede] || Store.CATEGORIAS).map((c) => `<option ${c === a.categoria ? "selected" : ""}>${esc(c)}</option>`).join("")}
           </select></div>
         <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
+      </form>
+      <form data-action="corregir-fecha-pago" data-alumno="${a.id}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="field" style="margin:0;"><label>Fecha de pago${a.fechaPagoInicial ? " (corregir)" : ""}</label>
+          <input name="fecha" type="date" value="${a.fechaPagoInicial || ""}" /></div>
+        <div class="field" style="margin:0;"><label>Periodicidad</label>
+          <select name="periodicidad">
+            <option value="" ${!a.periodicidadPago ? "selected" : ""}>—</option>
+            <option value="mensual" ${a.periodicidadPago === "mensual" ? "selected" : ""}>Mensual</option>
+            <option value="6meses" ${a.periodicidadPago === "6meses" ? "selected" : ""}>6 meses</option>
+            <option value="anual" ${a.periodicidadPago === "anual" ? "selected" : ""}>Anual</option>
+          </select></div>
+        <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
+        ${a.fechaPagoInicial ? `<p style="width:100%;font-size:.72rem;color:var(--muted);margin:0;">El alumno ya la declaró y no puede volver a tocarla — solo el dueño puede corregirla acá.</p>` : ""}
       </form>` : ""}
     </div>` : ""}
 
@@ -2147,6 +2160,9 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "declarar-fecha-pago") {
       await Store.declararFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
       toast("Fecha de pago guardada");
+    } else if (action === "corregir-fecha-pago") {
+      await Store.corregirFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
+      toast("Fecha de pago corregida");
     } else if (action === "add-bitacora") {
       await Store.addBitacora({
         alumnoId: form.dataset.alumno, tipo: data.tipo, nota: data.nota.trim(), autor: perfil?.nombre,

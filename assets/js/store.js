@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=13";
+import { sb } from "./supabase-client.js?v=14";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -201,6 +201,17 @@ export const Store = {
   // la UI, igual que el profe a cargo — ver AlumnoDetail en app.js)
   async asignarCategoria(alumnoId, categoria) {
     const { error } = await sb.from("alumnos").update({ categoria: categoria || null }).eq("id", alumnoId);
+    if (error) throw error;
+    await cargar("alumnos");
+  },
+  // el alumno/papá solo puede declarar su fecha de pago UNA vez (ver
+  // declararFechaPago / declarar_fecha_pago). Si se equivocó, o hay que
+  // corregirla más adelante, la única forma es que el dueño la edite acá
+  // (se controla en la UI, igual que la categoría / el profe a cargo).
+  async corregirFechaPago(alumnoId, fecha, periodicidad) {
+    const { error } = await sb.from("alumnos")
+      .update({ fecha_pago_inicial: fecha || null, periodicidad_pago: periodicidad || null })
+      .eq("id", alumnoId);
     if (error) throw error;
     await cargar("alumnos");
   },
