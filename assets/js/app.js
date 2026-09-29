@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=10";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=10";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=10";
-import { sb } from "./supabase-client.js?v=10";
+import { Store, toYMD } from "./store.js?v=11";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=11";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=11";
+import { sb } from "./supabase-client.js?v=11";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=10";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=10" en los imports de arriba son para que el navegador de
+   Los "?v=11" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=10" en el proyecto (app/index.html, store.js e
+   aparezca "?v=11" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -731,8 +731,7 @@ function MiSuscripcion() {
             </table>` : `<div class="empty" style="border:0;">Todavía no hay pagos registrados.</div>`}
         </div>
       </div>`;
-  }).join("") + `
-    <div class="block"><a class="btn btn-ghost btn-sm" href="#/inscribirse">Ver planes e inscribirme</a></div>`;
+  }).join("") + PlanesPago();
 }
 
 /* ---------------- fotos ---------------- */
@@ -1611,6 +1610,39 @@ function planDurOptions(selectedPlan, selectedDur) {
   return opts.join("");
 }
 
+// grid de planes con botón directo a Mercado Pago (el mismo link que ya usa
+// el sitio público) — así pagar desde adentro del panel es igual de fácil
+// que desde afuera. Si un plan todavía no tiene link cargado, el botón
+// manda al formulario de abajo para que la academia lo gestione a mano.
+function PlanesPago() {
+  return `
+    <div class="block">
+      <div class="block-head"><h3>Elige tu plan y paga con Mercado Pago</h3></div>
+      <div class="plans">
+        ${PLANES.map((p) => `
+          <div class="card plan">
+            <div class="row-title">${esc(p.nombre)}</div>
+            ${p.detalle ? `<div class="row-sub">${esc(p.detalle)}</div>` : ""}
+            <ul>
+              ${p.duraciones.map((d) => `
+                <li style="list-style:none;padding:0;margin-top:6px;">
+                  <div class="row-sub" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">${esc(d.label)}</div>
+                  <div class="price" style="margin-bottom:8px;">${fmtMXN(d.real)}</div>
+                  <a class="btn ${d.linkPago ? "btn-primary" : "btn-ghost"} btn-sm" style="width:100%;"
+                     href="${d.linkPago || `#/inscribirse?plan=${p.id}&dur=${d.id}`}" ${d.linkPago ? 'target="_blank" rel="noopener"' : ""}>
+                    ${d.linkPago ? "Pagar con Mercado Pago" : "Pedir este plan"}
+                  </a>
+                </li>`).join("")}
+            </ul>
+          </div>`).join("")}
+      </div>
+      <p style="font-size:.78rem;color:var(--muted);margin-top:-16px;margin-bottom:30px;max-width:60ch;">
+        ¿Alumno internacional que paga en USD (Stripe/PayPal/Wise)? Usa el formulario de abajo —
+        la academia te contacta para coordinar el pago y activar tu cuenta.
+      </p>
+    </div>`;
+}
+
 function Inscribirse(fullPath) {
   const query = fullPath.includes("?") ? fullPath.split("?")[1] : "";
   const params = new URLSearchParams(query);
@@ -1618,11 +1650,12 @@ function Inscribirse(fullPath) {
   const inscripciones = Store.inscripciones();
 
   return `
+    ${esAlumno() ? PlanesPago() : ""}
     <div class="block">
       <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
-        Elige tu plan y déjanos tus datos. Si el plan ya tiene un link de pago de Mercado Pago
-        conectado, el botón del sitio te lleva directo a pagar; si no, la academia recibe tu
-        inscripción, te contacta y activa tu cuenta al confirmar el pago.
+        ${esAlumno()
+          ? "¿No pudiste pagar directo arriba, o tu plan todavía no tiene link? Manda tu inscripción y la academia te contacta para activar tu cuenta."
+          : "Elige tu plan y déjanos tus datos. Si el plan ya tiene un link de pago de Mercado Pago conectado, el botón del sitio te lleva directo a pagar; si no, la academia recibe tu inscripción, te contacta y activa tu cuenta al confirmar el pago."}
       </p>
       ${found ? `<div class="mp-note" style="margin-bottom:16px;">Plan preseleccionado: <b>${esc(found.plan.nombre)} · ${esc(found.dur.label)}</b> — ${fmtMXN(found.dur.real)}</div>` : ""}
       <form class="card" data-action="inscribirse" style="max-width:460px;">
