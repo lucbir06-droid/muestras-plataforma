@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=9";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=9";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=9";
-import { sb } from "./supabase-client.js?v=9";
+import { Store, toYMD } from "./store.js?v=10";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=10";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=10";
+import { sb } from "./supabase-client.js?v=10";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=9";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=9" en los imports de arriba son para que el navegador de
+   Los "?v=10" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=9" en el proyecto (app/index.html, store.js e
+   aparezca "?v=10" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1538,11 +1538,12 @@ function Pagos() {
         ${METODOS_PAGO.map((m) => `<span>${m}</span>`).join("")}
       </div>
 
+      ${PLANES.some((p) => p.duraciones.some((d) => !d.linkPago)) ? `
       <div class="mp-note">
-        <b>Para cobrar de verdad con Mercado Pago</b> crea un link de pago por plan y pégalo en
+        <b>Todavía falta un link de Mercado Pago.</b> Crea el link de pago que falte y pégalo en
         <code>assets/js/planes.js</code> (pasos en el README). Mientras tanto esta pantalla lleva el
         registro de cobros manuales (efectivo, transferencia).
-      </div>
+      </div>` : ""}
     </div>
 
     <div class="block">
