@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=8";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=8";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=8";
-import { sb } from "./supabase-client.js?v=8";
+import { Store, toYMD } from "./store.js?v=9";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=9";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=9";
+import { sb } from "./supabase-client.js?v=9";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=8";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=8" en los imports de arriba son para que el navegador de
+   Los "?v=9" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=8" en el proyecto (app/index.html, store.js e
+   aparezca "?v=9" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -156,18 +156,25 @@ function barra(label, valor) {
 }
 
 /* estado de la suscripción de un alumno según sus pagos */
+// la "fecha de corte" de un alumno: el último pago pagado + su periodicidad
+// (mensual/6 meses/anual). null si nunca pagó nada con periodicidad.
+function fechaVencimiento(alumnoId) {
+  const ultimo = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad);
+  if (!ultimo) return null;
+  const vence = new Date(ultimo.fecha);
+  vence.setMonth(vence.getMonth() + (ultimo.periodicidad === "anual" ? 12 : ultimo.periodicidad === "6meses" ? 6 : 1));
+  return vence;
+}
+
 function estadoSuscripcion(alumnoId) {
-  const pagos = Store.pagos().filter((p) => p.alumnoId === alumnoId); // ya vienen del más nuevo al más viejo
-  const ultimo = pagos.find((p) => p.estado === "pagado" && p.periodicidad);
-  const pendiente = pagos.find((p) => p.estado === "pendiente");
-  if (ultimo) {
-    const vence = new Date(ultimo.fecha);
-    vence.setMonth(vence.getMonth() + (ultimo.periodicidad === "anual" ? 12 : ultimo.periodicidad === "6meses" ? 6 : 1));
-    if (vence >= new Date()) return { texto: "Activa", kind: "ok", detalle: `Vigente hasta ${fmtDateLong(vence)}` };
-    return { texto: "Vencida", kind: "crit", detalle: `Venció el ${fmtDateLong(vence)}` };
+  const pendiente = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pendiente");
+  const vence = fechaVencimiento(alumnoId);
+  if (vence) {
+    if (vence >= new Date()) return { texto: "Activa", kind: "ok", detalle: `Fecha de corte: ${fmtDateLong(vence)}`, vence };
+    return { texto: "Vencida", kind: "crit", detalle: `Venció el ${fmtDateLong(vence)}`, vence };
   }
-  if (pendiente) return { texto: "Pago pendiente", kind: "warn", detalle: `${pendiente.concepto} · ${fmtMoney(pendiente.monto, pendiente.moneda)}` };
-  return { texto: "Sin suscripción", kind: "muted", detalle: "Todavía no hay pagos registrados." };
+  if (pendiente) return { texto: "Pago pendiente", kind: "warn", detalle: `${pendiente.concepto} · ${fmtMoney(pendiente.monto, pendiente.moneda)}`, vence: null };
+  return { texto: "Sin suscripción", kind: "muted", detalle: "Todavía no hay pagos registrados.", vence: null };
 }
 
 /* ---------------- router ---------------- */
@@ -482,6 +489,44 @@ async function route() {
     eyebrow.textContent = `${perfil.nombre} · ${rolLabel}`;
   }
   render();
+  if (esDueno()) revisarAvisosPagos(); // no bloquea el render, se manda en segundo plano
+}
+
+// una vez por día (por pestaña), si sos dueño: revisa qué alumnos vencen en
+// 3 días o ya vencieron y todavía no se avisó, y le manda a Millán un solo
+// email con el resumen. Cada aviso se manda una sola vez (se marca en
+// recordatorios_enviados) aunque abra la app varias veces el mismo día.
+let avisosRevisadosHoy = null;
+async function revisarAvisosPagos() {
+  const hoyStr = toYMD(new Date());
+  if (avisosRevisadosHoy === hoyStr) return;
+  avisosRevisadosHoy = hoyStr;
+  try {
+    const hoy = new Date(new Date().toDateString());
+    const lineas = [];
+    for (const a of Store.alumnos().filter((x) => x.activo)) {
+      const venc = fechaVencimiento(a.id);
+      if (!venc) continue;
+      const dias = Math.round((venc - hoy) / 86400000);
+      if (dias === 3) {
+        if (await Store.intentarMarcarRecordatorio(a.id, "por_vencer", toYMD(venc))) {
+          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sede}) — vence en 3 días, el ${fmtDateLong(venc)}.`);
+        }
+      } else if (dias < 0) {
+        if (await Store.intentarMarcarRecordatorio(a.id, "vencido", toYMD(venc))) {
+          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sede}) — VENCIÓ el ${fmtDateLong(venc)} y todavía no hay un pago nuevo registrado.`);
+        }
+      }
+    }
+    if (lineas.length) {
+      await notificarEmail({
+        subject: `Avisos de pago — ${lineas.length} alumno${lineas.length > 1 ? "s" : ""}`,
+        message: `Resumen de fechas de corte de hoy:\n\n${lineas.join("\n")}`,
+      });
+    }
+  } catch (err) {
+    console.warn("No se pudieron revisar los avisos de pago:", err);
+  }
 }
 
 async function init() {
@@ -576,6 +621,7 @@ function solicitudRow(s) {
 
 function alumnoCard(a) {
   const top = a.objetivos?.[0];
+  const sus = esDueno() ? estadoSuscripcion(a.id) : null;
   return `
     <a class="card alumno-card" href="#/alumnos/${a.id}">
       <div class="top">
@@ -585,6 +631,7 @@ function alumnoCard(a) {
           <div class="meta">${esc(a.categoria)} · ${esc(a.sede)}</div>
         </div>
       </div>
+      ${sus ? `<div class="meta" style="margin-top:8px;">${badge(sus.vence ? (sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Corte: ${fmtDate(sus.vence)}`) : sus.texto, sus.kind)}</div>` : ""}
       ${top ? `
         <div class="goal">
           <div class="rowline"><span>${esc(top.titulo)}</span><em>${top.avance}%</em></div>
@@ -662,10 +709,17 @@ function MiSuscripcion() {
   return alumnos.map((a) => {
     const sus = estadoSuscripcion(a.id);
     const pagos = Store.pagos().filter((p) => p.alumnoId === a.id);
+    const diasParaVencer = sus.vence ? Math.round((sus.vence - new Date(new Date().toDateString())) / 86400000) : null;
+    const avisoPago = sus.kind === "crit"
+      ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:14px;"><b>Pago vencido.</b> Renueva tu suscripción para seguir con acceso completo.</div>`
+      : diasParaVencer !== null && diasParaVencer <= 3
+        ? `<div class="mp-note" style="margin-bottom:14px;"><b>Tu pago vence en ${diasParaVencer === 0 ? "0 días — hoy" : diasParaVencer === 1 ? "1 día" : `${diasParaVencer} días`}.</b> Renueva a tiempo para no perder acceso.</div>`
+        : "";
     return `
       <div class="block">
         <div class="block-head"><h3>${esc(a.nombre)}</h3>${badge(sus.texto, sus.kind)}</div>
         <p style="font-size:.86rem;color:var(--muted);margin-bottom:14px;">${esc(sus.detalle)}</p>
+        ${avisoPago}
         <div class="card scrollx">
           ${pagos.length ? `
             <table class="tbl">
@@ -1090,10 +1144,32 @@ function AlumnosList() {
       </details>
     </div>` : ""}
 
-    <div class="alumno-grid">
-      ${alumnos.length ? alumnos.map(alumnoCard).join("") : `<div class="empty">${esDueno() ? "Todavía no hay alumnos cargados." : "Todavía no tienes alumnos asignados."}</div>`}
-    </div>
+    ${alumnos.length ? Store.SEDES.map((sede) => alumnosPorSede(sede, alumnos)).join("")
+      : `<div class="empty">${esDueno() ? "Todavía no hay alumnos cargados." : "Todavía no tienes alumnos asignados."}</div>`}
   `;
+}
+
+// una sección por sede, y dentro de cada una una sub-sección por división —
+// así es mucho más fácil encontrar a un alumno que en una sola lista larga.
+function alumnosPorSede(sede, alumnos) {
+  const deLaSede = alumnos.filter((a) => a.sede === sede);
+  if (!deLaSede.length) return "";
+  const divisiones = Store.SEDE_CATEGORIAS[sede] || Store.CATEGORIAS;
+  const sinDivision = deLaSede.filter((a) => !divisiones.includes(a.categoria));
+  return `
+    <div class="block">
+      <div class="block-head"><h3>${esc(sede)} <span class="badge badge-muted" style="margin-left:8px;">${deLaSede.length}</span></h3></div>
+      ${divisiones.map((cat) => {
+        const de = deLaSede.filter((a) => a.categoria === cat);
+        if (!de.length) return "";
+        return `
+          <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2);margin:18px 0 10px;">${esc(cat)}</p>
+          <div class="alumno-grid">${de.map(alumnoCard).join("")}</div>`;
+      }).join("")}
+      ${sinDivision.length ? `
+        <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 10px;">Sin división asignada</p>
+        <div class="alumno-grid">${sinDivision.map(alumnoCard).join("")}</div>` : ""}
+    </div>`;
 }
 
 function AlumnoDetail(id) {
@@ -1122,7 +1198,10 @@ function AlumnoDetail(id) {
         ${staff && (a.telefono || a.correo) ? `<div class="row-sub" style="margin-top:4px;">${[a.telefono, a.correo].filter(Boolean).map(esc).join(" · ")}</div>` : ""}
         ${a.tallaPlayera ? `<div class="row-sub">Playera: ${esc(a.tallaPlayera)}</div>` : ""}
       </div>
-      ${badge(sus.texto, sus.kind)}
+      <div style="text-align:right;">
+        ${badge(sus.texto, sus.kind)}
+        ${staff ? `<div class="row-sub" style="margin-top:6px;">${esc(sus.detalle)}</div>` : ""}
+      </div>
     </div>
 
     ${staff ? `
@@ -1631,6 +1710,14 @@ function Profes() {
 function Duenos() {
   const alumnos = Store.alumnos();
   const pagos = Store.pagos();
+  const hoy = new Date(new Date().toDateString());
+  const conVencimiento = alumnos
+    .map((a) => ({ a, vence: fechaVencimiento(a.id) }))
+    .filter((x) => x.vence);
+  const vencidos = conVencimiento.filter((x) => x.vence < hoy).sort((x, y) => x.vence - y.vence);
+  const porVencer = conVencimiento
+    .filter((x) => x.vence >= hoy && Math.round((x.vence - hoy) / 86400000) <= 7)
+    .sort((x, y) => x.vence - y.vence);
   const ingresosMXN = pagos.filter((p) => p.estado === "pagado" && p.moneda === "MXN").reduce((s, p) => s + p.monto, 0);
   const ingresosUSD = pagos.filter((p) => p.estado === "pagado" && p.moneda === "USD").reduce((s, p) => s + p.monto, 0);
   const pendientes = pagos.filter((p) => p.estado === "pendiente");
@@ -1663,6 +1750,29 @@ function Duenos() {
       <div class="card stat"><span class="n">${fmtMoney(totalPendienteMXN, "MXN")}</span><span class="l">Por cobrar (MXN)</span></div>
       <div class="card stat"><span class="n">${nuevosDelMes}</span><span class="l">Alumnos nuevos (30 días)</span></div>
     </div>
+
+    ${vencidos.length || porVencer.length ? `
+    <div class="block">
+      <div class="block-head"><h3>Fechas de corte</h3></div>
+      ${vencidos.length ? `
+        <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--crit);margin-bottom:10px;">Vencidos — cobrar</p>
+        <div class="list" style="margin-bottom:18px;">
+          ${vencidos.map(({ a, vence }) => `
+            <a class="row-card" href="#/alumnos/${a.id}">
+              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sede)}</div></div>
+              ${badge(`Venció ${fmtDate(vence)}`, "crit")}
+            </a>`).join("")}
+        </div>` : ""}
+      ${porVencer.length ? `
+        <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);margin-bottom:10px;">Vencen esta semana</p>
+        <div class="list">
+          ${porVencer.map(({ a, vence }) => `
+            <a class="row-card" href="#/alumnos/${a.id}">
+              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sede)}</div></div>
+              ${badge(`Corte ${fmtDate(vence)}`, "warn")}
+            </a>`).join("")}
+        </div>` : ""}
+    </div>` : ""}
 
     <div class="block">
       <div class="block-head"><h3>Estado de resultados</h3></div>

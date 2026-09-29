@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=8";
+import { sb } from "./supabase-client.js?v=9";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -21,6 +21,11 @@ const DB_KEY = "millan_academy_v3";
 // internacionales, no sedes propias — eso se muestra aparte en el sitio.
 const SEDES = ["Polanco", "Metepec"];
 const CATEGORIAS = ["1ra División", "2da División", "3ra División", "4ta División"];
+// qué divisiones hay en cada sede (Polanco es más chica: solo 1ra y 2da)
+const SEDE_CATEGORIAS = {
+  Polanco: ["1ra División", "2da División"],
+  Metepec: ["1ra División", "2da División", "3ra División", "4ta División"],
+};
 const TALLAS = ["Niño - S", "Niño - M", "Niño - L", "Adulto - S", "Adulto - M", "Adulto - L", "Adulto - XL"];
 const DIAS_DISPONIBLES = ["martes", "miércoles", "viernes"];
 const HORAS_DISPONIBLES = ["19:00", "20:00", "21:00", "22:00"];
@@ -149,7 +154,7 @@ async function insertar(tabla, filas) {
 }
 
 export const Store = {
-  SEDES, CATEGORIAS, TALLAS, DIAS_DISPONIBLES, HORAS_DISPONIBLES,
+  SEDES, CATEGORIAS, SEDE_CATEGORIAS, TALLAS, DIAS_DISPONIBLES, HORAS_DISPONIBLES,
 
   /* ---- ciclo de vida ---- */
   // carga todo lo que la cuenta actual tiene permiso de ver
@@ -332,6 +337,19 @@ export const Store = {
       periodicidad: e.periodicidad || null, estado: e.estado || "pendiente",
     });
     await cargar("pagos");
+  },
+  // avisa una sola vez por (alumno, tipo de aviso, fecha de corte): si ya se
+  // había mandado ese mismo aviso antes, devuelve false y no hay que volver
+  // a notificar. Se apoya en la restricción "unique" de la tabla — así no
+  // hace falta consultar primero (sin condición de carrera).
+  async intentarMarcarRecordatorio(alumnoId, tipo, fechaVenc) {
+    const { error } = await sb.from("recordatorios_enviados")
+      .insert({ alumno_id: alumnoId, tipo, fecha_venc: fechaVenc });
+    if (error) {
+      if (error.code === "23505") return false; // ya se había mandado
+      throw error;
+    }
+    return true;
   },
 
   /* ---- check-in / check-out ---- */

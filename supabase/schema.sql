@@ -293,6 +293,18 @@ create table if not exists public.pagos (
   fecha timestamptz not null default now()
 );
 
+-- Marca qué avisos de pago (3 días antes / vencido) ya se le mandaron a
+-- Millán por email, para no mandarle el mismo aviso todos los días. Se
+-- revisa cuando el dueño abre la app (ver revisarAvisosPagos en app.js).
+create table if not exists public.recordatorios_enviados (
+  id uuid primary key default gen_random_uuid(),
+  alumno_id uuid not null references public.alumnos(id) on delete cascade,
+  tipo text not null check (tipo in ('por_vencer', 'vencido')),
+  fecha_venc date not null,
+  enviado_en timestamptz not null default now(),
+  unique (alumno_id, tipo, fecha_venc)
+);
+
 -- Check-in (llegada, con foto) y check-out (salida, con resumen)
 create table if not exists public.checkins (
   id uuid primary key default gen_random_uuid(),
@@ -391,6 +403,7 @@ alter table public.objetivos_categoria enable row level security;
 alter table public.evidencias enable row level security;
 alter table public.contactos enable row level security;
 alter table public.config enable row level security;
+alter table public.recordatorios_enviados enable row level security;
 
 -- Borra TODOS los permisos anteriores de las tablas de arriba: los
 -- permisos se suman, así que uno viejo demasiado abierto anularía a
@@ -549,6 +562,9 @@ create policy "mensajes directo escribir" on public.mensajes for insert to authe
 create policy "contactos dueno" on public.contactos for all to authenticated
   using (public.es_dueno()) with check (public.es_dueno());
 create policy "config dueno" on public.config for all to authenticated
+  using (public.es_dueno()) with check (public.es_dueno());
+
+create policy "recordatorios dueno" on public.recordatorios_enviados for all to authenticated
   using (public.es_dueno()) with check (public.es_dueno());
 
 -- fotos: subir requiere sesión
