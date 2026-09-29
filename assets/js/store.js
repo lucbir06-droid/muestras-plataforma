@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=12";
+import { sb } from "./supabase-client.js?v=13";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -84,6 +84,7 @@ const mapAlumno = (r) => ({
   activo: r.activo, avatar: r.avatar || iniciales(r.nombre), objetivos: r.objetivos || [],
   evaluacion: r.evaluacion || { tactica: 0, tecnica: 0, fisico: 0, comentarios: "" },
   alta: r.alta, codigoVinculo: r.codigo_vinculo,
+  fechaPagoInicial: r.fecha_pago_inicial, periodicidadPago: r.periodicidad_pago,
 });
 const mapBitacora = (r) => ({ id: r.id, alumnoId: r.alumno_id, tipo: r.tipo, nota: r.nota, autor: r.autor, fecha: r.fecha });
 // la fecha de una reserva es un día (sin hora): la dejamos al mediodía local para que ninguna zona horaria la corra de día
@@ -213,6 +214,13 @@ export const Store = {
     const { error } = await sb.rpc("vincular_alumno", { p_codigo: codigo });
     if (error) throw error;
     await Promise.all(Object.keys(TABLAS).map(cargar));
+  },
+  // el papá/alumno declara SU fecha de pago una sola vez — la base de
+  // datos rechaza el pedido si ya estaba puesta (ver declarar_fecha_pago)
+  async declararFechaPago(alumnoId, fecha, periodicidad) {
+    const { error } = await sb.rpc("declarar_fecha_pago", { p_alumno_id: alumnoId, p_fecha: fecha, p_periodicidad: periodicidad });
+    if (error) throw error;
+    await cargar("alumnos");
   },
 
   /* ---- staff (para asignar profes) ---- */

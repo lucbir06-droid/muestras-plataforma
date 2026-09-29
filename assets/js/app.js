@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=12";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=12";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=12";
-import { sb } from "./supabase-client.js?v=12";
+import { Store, toYMD } from "./store.js?v=13";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=13";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=13";
+import { sb } from "./supabase-client.js?v=13";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=12";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=12" en los imports de arriba son para que el navegador de
+   Los "?v=13" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=12" en el proyecto (app/index.html, store.js e
+   aparezca "?v=13" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -156,13 +156,28 @@ function barra(label, valor) {
 }
 
 /* estado de la suscripción de un alumno según sus pagos */
-// la "fecha de corte" de un alumno: el último pago pagado + su periodicidad
-// (mensual/6 meses/anual). null si nunca pagó nada con periodicidad.
+function sumarPeriodo(fecha, periodicidad) {
+  const d = new Date(fecha);
+  d.setMonth(d.getMonth() + (periodicidad === "anual" ? 12 : periodicidad === "6meses" ? 6 : 1));
+  return d;
+}
+
+// la "fecha de corte" de un alumno:
+//  1) si el staff ya registró un pago pagado, esa fecha + su periodicidad
+//     manda (es lo más confiable: alguien confirmó que sí se cobró).
+//  2) si no hay ningún pago cargado todavía, usamos lo que el alumno/papá
+//     declaró una sola vez (fechaPagoInicial + periodicidadPago),
+//     adelantada ciclo a ciclo hasta la próxima fecha que todavía no pasó.
+// null si no hay ni pagos ni fecha declarada.
 function fechaVencimiento(alumnoId) {
   const ultimo = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad);
-  if (!ultimo) return null;
-  const vence = new Date(ultimo.fecha);
-  vence.setMonth(vence.getMonth() + (ultimo.periodicidad === "anual" ? 12 : ultimo.periodicidad === "6meses" ? 6 : 1));
+  if (ultimo) return sumarPeriodo(ultimo.fecha, ultimo.periodicidad);
+
+  const a = Store.alumno(alumnoId);
+  if (!a?.fechaPagoInicial || !a.periodicidadPago) return null;
+  let vence = sumarPeriodo(a.fechaPagoInicial, a.periodicidadPago);
+  const hoy = new Date(new Date().toDateString());
+  for (let i = 0; vence < hoy && i < 240; i++) vence = sumarPeriodo(vence, a.periodicidadPago);
   return vence;
 }
 
@@ -715,10 +730,22 @@ function MiSuscripcion() {
       : diasParaVencer !== null && diasParaVencer <= 3
         ? `<div class="mp-note" style="margin-bottom:14px;"><b>Tu pago vence en ${diasParaVencer === 0 ? "0 días — hoy" : diasParaVencer === 1 ? "1 día" : `${diasParaVencer} días`}.</b> Renueva a tiempo para no perder acceso.</div>`
         : "";
+    const periodicidadLabel = { mensual: "Mensual", "6meses": "6 meses", anual: "Anual" };
+    const declararFecha = a.fechaPagoInicial
+      ? `<p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Declaraste tu pago como <b>${periodicidadLabel[a.periodicidadPago] || a.periodicidadPago}</b>, desde el ${fmtDate(a.fechaPagoInicial)}.</p>`
+      : `<form data-action="declarar-fecha-pago" data-alumno="${a.id}" class="card" style="margin-bottom:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="field" style="margin:0;"><label>¿Cuándo hiciste tu primer pago?</label><input name="fecha" type="date" required max="${toYMD(new Date())}" /></div>
+          <div class="field" style="margin:0;"><label>¿Cada cuánto pagas?</label>
+            <select name="periodicidad"><option value="mensual">Mensual</option><option value="6meses">6 meses</option><option value="anual">Anual</option></select>
+          </div>
+          <button class="btn btn-ghost btn-sm" type="submit">Guardar fecha de pago</button>
+          <p style="width:100%;font-size:.74rem;color:var(--muted);margin:0;">Solo se puede poner una vez — de ahí en más se calcula sola cada ciclo.</p>
+        </form>`;
     return `
       <div class="block">
         <div class="block-head"><h3>${esc(a.nombre)}</h3>${badge(sus.texto, sus.kind)}</div>
         <p style="font-size:.86rem;color:var(--muted);margin-bottom:14px;">${esc(sus.detalle)}</p>
+        ${declararFecha}
         ${avisoPago}
         <div class="card scrollx">
           ${pagos.length ? `
@@ -1507,6 +1534,10 @@ function Reportes() {
           <div style="text-align:right;">
             <div class="row-title tabular">${avgAvance(a)}%</div>
             <div class="row-sub">avance de objetivos</div>
+            ${esDueno() ? (() => {
+              const sus = estadoSuscripcion(a.id);
+              return sus.vence ? `<div style="margin-top:8px;">${badge(sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Corte: ${fmtDate(sus.vence)}`, sus.kind)}</div>` : "";
+            })() : ""}
           </div>
         </a>`;
       }).join("") : `<div class="empty">Todavía no hay reportes.</div>`}
@@ -1521,6 +1552,10 @@ function Pagos() {
   const ingresosMXN = pagos.filter((p) => p.estado === "pagado" && p.moneda === "MXN").reduce((s, p) => s + p.monto, 0);
   const ingresosUSD = pagos.filter((p) => p.estado === "pagado" && p.moneda === "USD").reduce((s, p) => s + p.monto, 0);
   const pendientes = pagos.filter((p) => p.estado === "pendiente").length;
+  const fechas = Store.alumnos()
+    .map((a) => ({ a, vence: fechaVencimiento(a.id) }))
+    .filter((x) => x.vence)
+    .sort((x, y) => x.vence - y.vence);
 
   return `
     <div class="stats">
@@ -1528,6 +1563,18 @@ function Pagos() {
       <div class="card stat"><span class="n">${fmtMoney(ingresosUSD, "USD")}</span><span class="l">Ingresos (USD)</span></div>
       <div class="card stat"><span class="n">${pendientes}</span><span class="l">Pagos pendientes</span></div>
     </div>
+
+    ${fechas.length ? `
+    <div class="block">
+      <div class="block-head"><h3>Fecha de corte por alumno</h3></div>
+      <div class="list">
+        ${fechas.map(({ a, vence }) => `
+          <a class="row-card" href="#/alumnos/${a.id}">
+            <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sede)}</div></div>
+            ${badge(vence < new Date(new Date().toDateString()) ? `Venció ${fmtDate(vence)}` : `Corte: ${fmtDate(vence)}`, vence < new Date(new Date().toDateString()) ? "crit" : "ok")}
+          </a>`).join("")}
+      </div>
+    </div>` : ""}
 
     <div class="block">
       <div class="block-head"><h3>Planes</h3></div>
@@ -2097,6 +2144,9 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "asignar-categoria") {
       await Store.asignarCategoria(form.dataset.alumno, data.categoria);
       toast("División actualizada");
+    } else if (action === "declarar-fecha-pago") {
+      await Store.declararFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
+      toast("Fecha de pago guardada");
     } else if (action === "add-bitacora") {
       await Store.addBitacora({
         alumnoId: form.dataset.alumno, tipo: data.tipo, nota: data.nota.trim(), autor: perfil?.nombre,

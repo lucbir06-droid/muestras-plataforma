@@ -126,6 +126,15 @@ alter table public.alumnos alter column codigo_vinculo set default upper(substr(
 update public.alumnos set codigo_vinculo = upper(substr(md5(gen_random_uuid()::text), 1, 8)) where codigo_vinculo is null;
 create unique index if not exists alumnos_codigo_vinculo_key on public.alumnos (codigo_vinculo);
 
+-- Fecha de pago que el alumno/papá declara UNA sola vez (con qué
+-- periodicidad paga y desde cuándo). Sirve para calcular la fecha de corte
+-- incluso antes de que el dueño registre un pago a mano — ver
+-- declarar_fecha_pago() abajo, que es la única forma de tocar estas dos
+-- columnas y bloquea cualquier cambio si ya estaban puestas.
+alter table public.alumnos add column if not exists fecha_pago_inicial date;
+alter table public.alumnos add column if not exists periodicidad_pago text
+  check (periodicidad_pago in ('mensual', '6meses', 'anual'));
+
 create table if not exists public.alumno_usuarios (
   alumno_id uuid not null references public.alumnos(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -209,6 +218,41 @@ end;
 $$;
 revoke execute on function public.vincular_alumno(text) from public, anon;
 grant execute on function public.vincular_alumno(text) to authenticated;
+
+-- El alumno/papá declara SU fecha de pago (desde cuándo y cada cuánto)
+-- una sola vez: si ya estaba puesta, rechaza el cambio. Así el dueño ve la
+-- fecha de corte aunque todavía no haya registrado un pago a mano.
+create or replace function public.declarar_fecha_pago(p_alumno_id uuid, p_fecha date, p_periodicidad text)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_actual date;
+begin
+  if auth.uid() is null then
+    raise exception 'Necesitas iniciar sesión';
+  end if;
+  if p_periodicidad not in ('mensual', '6meses', 'anual') then
+    raise exception 'Periodicidad no válida';
+  end if;
+  if not exists (
+    select 1 from public.alumno_usuarios au
+    where au.alumno_id = p_alumno_id and au.user_id = auth.uid()
+  ) then
+    raise exception 'No puedes editar este alumno';
+  end if;
+  select fecha_pago_inicial into v_actual from public.alumnos where id = p_alumno_id;
+  if v_actual is not null then
+    raise exception 'La fecha de pago ya fue declarada y no se puede cambiar';
+  end if;
+  update public.alumnos
+    set fecha_pago_inicial = p_fecha, periodicidad_pago = p_periodicidad
+    where id = p_alumno_id;
+end;
+$$;
+revoke execute on function public.declarar_fecha_pago(uuid, date, text) from public, anon;
+grant execute on function public.declarar_fecha_pago(uuid, date, text) to authenticated;
 
 -- ---------------------------------------------------------------
 -- 4. DEMÁS TABLAS
