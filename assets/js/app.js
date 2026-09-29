@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=14";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=14";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=14";
-import { sb } from "./supabase-client.js?v=14";
+import { Store, toYMD } from "./store.js?v=15";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=15";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=15";
+import { sb } from "./supabase-client.js?v=15";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=14";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=14" en los imports de arriba son para que el navegador de
+   Los "?v=15" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=14" en el proyecto (app/index.html, store.js e
+   aparezca "?v=15" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -733,12 +733,19 @@ function MiSuscripcion() {
     const periodicidadLabel = { mensual: "Mensual", "6meses": "6 meses", anual: "Anual" };
     const declararFecha = a.fechaPagoInicial
       ? `<p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Declaraste tu pago como <b>${periodicidadLabel[a.periodicidadPago] || a.periodicidadPago}</b>, desde el ${fmtDate(a.fechaPagoInicial)}.</p>`
-      : `<form data-action="declarar-fecha-pago" data-alumno="${a.id}" class="card" style="margin-bottom:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-          <div class="field" style="margin:0;"><label>¿Cuándo hiciste tu primer pago?</label><input name="fecha" type="date" required max="${toYMD(new Date())}" /></div>
-          <div class="field" style="margin:0;"><label>¿Cada cuánto pagas?</label>
-            <select name="periodicidad"><option value="mensual">Mensual</option><option value="6meses">6 meses</option><option value="anual">Anual</option></select>
+      : `<form data-action="declarar-fecha-pago" data-alumno="${a.id}" class="card" style="margin-bottom:14px;">
+          <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:12px;max-width:60ch;">
+            ¿Ya entrenabas con la academia antes de esta app? Pon la fecha en la que empezaste a
+            pagar (por ejemplo, si pagas cada 15, cualquier 15 anterior sirve). ¿Eres alumno nuevo?
+            Pon la fecha de tu primer pago.
+          </p>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <div class="field" style="margin:0;"><label>¿Desde cuándo pagas?</label><input name="fecha" type="date" required max="${toYMD(new Date())}" /></div>
+            <div class="field" style="margin:0;"><label>¿Cada cuánto pagas?</label>
+              <select name="periodicidad"><option value="mensual">Mensual</option><option value="6meses">6 meses</option><option value="anual">Anual</option></select>
+            </div>
+            <button class="btn btn-ghost btn-sm" type="submit">Guardar fecha de pago</button>
           </div>
-          <button class="btn btn-ghost btn-sm" type="submit">Guardar fecha de pago</button>
           <p style="width:100%;font-size:.74rem;color:var(--muted);margin:0;">Solo se puede poner una vez — de ahí en más se calcula sola cada ciclo.</p>
         </form>`;
     return `
