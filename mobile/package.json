@@ -1,0 +1,19 @@
+{
+  "name": "millan-academy-mobile",
+  "version": "1.0.0",
+  "description": "App nativa (iOS/Android) de Millán Academy — shell de Capacitor sobre el panel web (app/).",
+  "private": true,
+  "scripts": {
+    "sync": "node sync-web.js && npx cap sync",
+    "open:android": "npm run sync && npx cap open android",
+    "open:ios": "npm run sync && npx cap open ios"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2"
+  }
+}

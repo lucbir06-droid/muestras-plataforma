@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Millán Academy</string>
+    <string name="title_activity_main">Millán Academy</string>
+    <string name="package_name">com.millanacademy.app</string>
+    <string name="custom_url_scheme">com.millanacademy.app</string>
+</resources>

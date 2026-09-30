@@ -138,15 +138,18 @@ planes sin link mandan a la inscripción manual.
 
 ## App Store y Google Play
 
-La app web se puede empaquetar para las tiendas (por ejemplo con Capacitor) sin
-reescribirla. Lo que hay que tener en cuenta:
+Ya está armado el proyecto de la app nativa en [`mobile/`](mobile/) (con
+[Capacitor](https://capacitorjs.com/) — envuelve el panel `app/` tal cual, sin
+reescribir nada). Ver [`mobile/README.md`](mobile/README.md) para los pasos de
+compilar/abrir cada plataforma.
 
-- **Apple** pide cuenta de desarrollador (**99 USD/año**), un Mac con Xcode para
-  compilar, y suele rechazar apps que son "solo una página web": conviene que
-  tenga funciones propias (notificaciones, cámara, etc.).
-- **Google Play** pide cuenta (**25 USD, pago único**) y es más flexible.
-- Antes de eso, primero se hace instalable como **PWA** (ícono en la pantalla de
-  inicio), que ya da mucho de la experiencia de app.
+- **Android**: se compila directo en Windows con Android Studio (gratis).
+  Cuenta de Google Play: **25 USD, pago único**. Más flexible que Apple con
+  revisiones.
+- **Apple**: pide cuenta de desarrollador (**99 USD/año**) y una Mac con Xcode
+  para compilar — si no hay Mac, se puede compilar en la nube con
+  [Codemagic](https://codemagic.io) sin tocar una. Suele rechazar apps que son
+  "solo una página web": conviene sumar notificaciones push antes de publicar.
 
 Los pagos dentro de la app tienen reglas de las tiendas (Apple/Google cobran
 comisión por compras digitales dentro de la app); las clases presenciales y
