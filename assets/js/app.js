@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=17";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=17";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=17";
-import { sb } from "./supabase-client.js?v=17";
+import { Store, toYMD } from "./store.js?v=18";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=18";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=18";
+import { sb } from "./supabase-client.js?v=18";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=17";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=17" en los imports de arriba son para que el navegador de
+   Los "?v=18" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=17" en el proyecto (app/index.html, store.js e
+   aparezca "?v=18" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -427,6 +427,15 @@ function wireAuthForms() {
           else if (/database error/i.test(msg) && form.rol.value !== "alumno") msg = "El código no es correcto. Pídeselo al dueño de la academia.";
           showSignup(msg);
           return;
+        }
+        // avisa a Millán por email que se creó una cuenta — no bloquea el
+        // alta ni se le muestra nada a quien se está registrando si falla
+        if (WEB3FORMS_ACCESS_KEY) {
+          const rolLabel = { alumno: "Alumno o papá/mamá", profe: "Profe", dueño: "Dueño" }[form.rol.value] || form.rol.value;
+          notificarEmail({
+            subject: `Nueva cuenta — ${form.nombre.value.trim()} (${rolLabel})`,
+            message: `${form.nombre.value.trim()} se registró como ${rolLabel}.\n\nCorreo: ${email}\nTeléfono: ${form.telefono.value.trim()}\nPaís: ${form.pais.value.trim()}`,
+          }).catch(() => {});
         }
         if (data.session) {
           // ya quedó logueado: sacamos el hash de /registro para que route()
