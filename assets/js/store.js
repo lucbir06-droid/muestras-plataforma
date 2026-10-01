@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=16";
+import { sb } from "./supabase-client.js?v=17";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -175,6 +175,10 @@ export const Store = {
 
   /* ---- alumnos ---- */
   alumnos() { return C.alumnos; },
+  // para listas/estadísticas del staff: deja afuera a los dados de baja
+  // (su ficha y su historial siguen intactos, solo no aparecen en el roster)
+  alumnosActivos() { return C.alumnos.filter((a) => a.activo !== false); },
+  alumnosDeBaja() { return C.alumnos.filter((a) => a.activo === false); },
   alumno(id) { return C.alumnos.find((a) => a.id === id) || null; },
   async addAlumno(d) {
     const [fila] = await insertar("alumnos", {
@@ -212,6 +216,13 @@ export const Store = {
     const { error } = await sb.from("alumnos")
       .update({ fecha_pago_inicial: fecha || null, periodicidad_pago: periodicidad || null })
       .eq("id", alumnoId);
+    if (error) throw error;
+    await cargar("alumnos");
+  },
+  // dar de baja / reactivar sin borrar nada (historial, pagos, evidencias
+  // quedan intactos) — a diferencia de eliminarAlumno, que sí borra todo.
+  async cambiarActivo(alumnoId, activo) {
+    const { error } = await sb.from("alumnos").update({ activo }).eq("id", alumnoId);
     if (error) throw error;
     await cargar("alumnos");
   },

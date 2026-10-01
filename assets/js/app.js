@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=16";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=16";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=16";
-import { sb } from "./supabase-client.js?v=16";
+import { Store, toYMD } from "./store.js?v=17";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=17";
+import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=17";
+import { sb } from "./supabase-client.js?v=17";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=16";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=16" en los imports de arriba son para que el navegador de
+   Los "?v=17" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=16" en el proyecto (app/index.html, store.js e
+   aparezca "?v=17" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -143,7 +143,7 @@ function errMsg(err) {
   return "No se pudo completar — revisa tu conexión e intenta de nuevo.";
 }
 function alumnoOptions(selectedId) {
-  return Store.alumnos()
+  return Store.alumnosActivos()
     .map((a) => `<option value="${a.id}" ${a.id === selectedId ? "selected" : ""}>${esc(a.nombre)} · ${esc(a.categoria || "")}</option>`)
     .join("");
 }
@@ -562,7 +562,7 @@ window.addEventListener("hashchange", route);
 /* ---------------- panel: dueño / profe ---------------- */
 
 function Dashboard() {
-  const alumnos = Store.alumnos();
+  const alumnos = esStaff() ? Store.alumnosActivos() : Store.alumnos();
   const reservas = Store.reservas();
   const solicitudes = Store.solicitudes();
   const pagos = Store.pagos();
@@ -921,7 +921,7 @@ function filaAsistencia(a, presente, conReporte) {
 
 function Checkout() {
   const { sede, fecha } = ctxCheckout;
-  const alumnos = Store.alumnos().filter((a) => a.sede === sede);
+  const alumnos = Store.alumnosActivos().filter((a) => a.sede === sede);
   const yaMarcados = new Map(Store.asistenciasDe(fecha, sede).map((a) => [a.alumnoId, a.presente]));
   const salidas = Store.checkins().filter((c) => c.tipo === "salida").slice(0, 5);
   return `
@@ -952,7 +952,7 @@ function Checkout() {
 async function handleCheckout(form) {
   const sede = form.elements.sede.value;
   const fecha = form.elements.fecha.value;
-  const alumnos = Store.alumnos().filter((a) => a.sede === sede);
+  const alumnos = Store.alumnosActivos().filter((a) => a.sede === sede);
   if (!alumnos.length) return;
   form.querySelector("button[type=submit]").disabled = true;
 
@@ -1007,7 +1007,7 @@ async function handleCheckout(form) {
 
 function Asistencia() {
   const { sede, fecha, categoria } = ctxAsistencia;
-  const alumnos = Store.alumnos().filter((a) => a.sede === sede && (!categoria || a.categoria === categoria));
+  const alumnos = Store.alumnosActivos().filter((a) => a.sede === sede && (!categoria || a.categoria === categoria));
   const yaMarcados = new Map(Store.asistenciasDe(fecha, sede).map((a) => [a.alumnoId, a.presente]));
 
   // sesiones recientes: cuántos asistieron cada día
@@ -1123,8 +1123,9 @@ async function handleEvidencia(form) {
 /* ---------------- alumnos ---------------- */
 
 function AlumnosList() {
-  const alumnos = Store.alumnos();
+  const alumnos = Store.alumnosActivos();
   const coaches = Store.coaches();
+  const deBaja = esDueno() ? Store.alumnosDeBaja() : [];
   return `
     ${esDueno() ? `
     <div class="block">
@@ -1179,6 +1180,22 @@ function AlumnosList() {
 
     ${alumnos.length ? Store.SEDES.map((sede) => alumnosPorSede(sede, alumnos)).join("")
       : `<div class="empty">${esDueno() ? "Todavía no hay alumnos cargados." : "Todavía no tienes alumnos asignados."}</div>`}
+
+    ${deBaja.length ? `
+    <div class="block">
+      <details class="card panel">
+        <summary style="cursor:pointer;font-family:var(--display);font-weight:600;font-size:.85rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);">
+          Dados de baja (${deBaja.length})
+        </summary>
+        <div class="list" style="margin-top:14px;">
+          ${deBaja.map((a) => `
+            <div class="row-card">
+              <a class="grow" href="#/alumnos/${a.id}"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sede)}</div></a>
+              <button class="btn btn-ghost btn-sm" data-action="reactivar-alumno" data-id="${a.id}" data-nombre="${esc(a.nombre)}">Reactivar</button>
+            </div>`).join("")}
+        </div>
+      </details>
+    </div>` : ""}
   `;
 }
 
@@ -1271,6 +1288,23 @@ function AlumnoDetail(id) {
         ${a.fechaPagoInicial ? `<p style="width:100%;font-size:.72rem;color:var(--muted);margin:0;">El alumno ya la declaró y no puede volver a tocarla — solo el dueño puede corregirla acá.</p>` : ""}
       </form>` : ""}
     </div>` : ""}
+
+    ${esDueno() ? `
+    <div class="card" style="margin-bottom:24px;display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+      <form data-action="cobrar-monto" data-alumno="${a.id}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;flex:1;min-width:260px;">
+        <div class="field" style="margin:0;"><label>Monto que tiene que pagar</label>
+          <input name="monto" type="number" min="0" step="0.01" placeholder="0.00" required /></div>
+        <div class="field" style="margin:0;"><label>Moneda</label>
+          <select name="moneda"><option value="MXN" ${a.moneda !== "USD" ? "selected" : ""}>MXN</option><option value="USD" ${a.moneda === "USD" ? "selected" : ""}>USD</option></select></div>
+        <input type="hidden" name="concepto" value="Mensualidad" />
+        <button class="btn btn-ghost btn-sm" type="submit">Avisarle el monto</button>
+        <p style="width:100%;font-size:.72rem;color:var(--muted);margin:0;">Queda como "Pago pendiente" y ${esc(a.nombre)} lo ve de inmediato en su suscripción, con el monto exacto.</p>
+      </form>
+      <button class="btn btn-ghost btn-sm" data-action="${a.activo === false ? "reactivar-alumno" : "dar-de-baja"}" data-id="${a.id}" data-nombre="${esc(a.nombre)}">
+        ${a.activo === false ? "Reactivar alumno" : "Dar de baja"}
+      </button>
+    </div>
+    ${a.activo === false ? `<div class="mp-note" style="margin-bottom:24px;"><b>${esc(a.nombre)} está dado de baja.</b> No aparece en el roster ni en los avisos de pago, pero su historial sigue intacto.</div>` : ""}` : ""}
 
     <div class="stats">
       <div class="card stat"><span class="n">${bitacora.length}</span><span class="l">Reportes y sesiones</span></div>
@@ -1536,7 +1570,7 @@ function solicitudFull(s) {
 /* ---------------- reportes ---------------- */
 
 function Reportes() {
-  const alumnos = Store.alumnos();
+  const alumnos = esStaff() ? Store.alumnosActivos() : Store.alumnos();
   if (!alumnos.length && esAlumno()) return AlumnoSinAlumno();
   return `
     <div class="list">
@@ -1572,7 +1606,7 @@ function Pagos() {
   const ingresosMXN = pagos.filter((p) => p.estado === "pagado" && p.moneda === "MXN").reduce((s, p) => s + p.monto, 0);
   const ingresosUSD = pagos.filter((p) => p.estado === "pagado" && p.moneda === "USD").reduce((s, p) => s + p.monto, 0);
   const pendientes = pagos.filter((p) => p.estado === "pendiente").length;
-  const fechas = Store.alumnos()
+  const fechas = Store.alumnosActivos()
     .map((a) => ({ a, vence: fechaVencimiento(a.id) }))
     .filter((x) => x.vence)
     .sort((x, y) => x.vence - y.vence);
@@ -1817,7 +1851,7 @@ function Profes() {
 /* ---------------- dueños ---------------- */
 
 function Duenos() {
-  const alumnos = Store.alumnos();
+  const alumnos = Store.alumnosActivos();
   const pagos = Store.pagos();
   const hoy = new Date(new Date().toDateString());
   const conVencimiento = alumnos
@@ -2183,7 +2217,7 @@ view.addEventListener("submit", async (e) => {
       toast("Ficha actualizada");
     } else if (action === "guardar-asistencia") {
       const { sede, fecha, categoria } = ctxAsistencia;
-      const lista = Store.alumnos().filter((a) => a.sede === sede && (!categoria || a.categoria === categoria));
+      const lista = Store.alumnosActivos().filter((a) => a.sede === sede && (!categoria || a.categoria === categoria));
       await Store.guardarAsistencias(fecha, sede, lista.map((a) => ({ alumnoId: a.id, presente: form.elements["presente_" + a.id].checked })), perfil?.nombre);
       toast("Asistencia guardada");
     } else if (action === "generar-horarios") {
@@ -2203,6 +2237,9 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "add-pago") {
       await Store.addPago({ alumnoId: data.alumnoId, concepto: data.concepto.trim(), metodo: data.metodo, moneda: data.moneda, monto: Number(data.monto), periodicidad: data.periodicidad, estado: data.estado });
       toast("Pago registrado");
+    } else if (action === "cobrar-monto") {
+      await Store.addPago({ alumnoId: form.dataset.alumno, concepto: data.concepto.trim(), metodo: "Mercado Pago", moneda: data.moneda, monto: Number(data.monto), estado: "pendiente" });
+      toast("Monto avisado — ya aparece en su suscripción");
     } else if (action === "inscribirse") {
       const [planId, durId] = data.planDur.split(":");
       const found = encontrarDuracion(planId, durId);
@@ -2275,6 +2312,19 @@ view.addEventListener("click", async (e) => {
       if (!confirm(`Esto borra a ${eliminarBtn.dataset.nombre} y todo su historial (reportes, asistencia, evidencias). No se puede deshacer. ¿Seguro?`)) return;
       await Store.eliminarAlumno(eliminarBtn.dataset.id);
       toast(`${eliminarBtn.dataset.nombre} eliminado`);
+      render();
+    }
+    const bajaBtn = e.target.closest("[data-action='dar-de-baja']");
+    if (bajaBtn) {
+      if (!confirm(`${bajaBtn.dataset.nombre} deja de aparecer en el roster y en los avisos de pago. Su historial no se borra y se puede reactivar cuando quieras. ¿Dar de baja?`)) return;
+      await Store.cambiarActivo(bajaBtn.dataset.id, false);
+      toast(`${bajaBtn.dataset.nombre} dado de baja`);
+      render();
+    }
+    const reactivarBtn = e.target.closest("[data-action='reactivar-alumno']");
+    if (reactivarBtn) {
+      await Store.cambiarActivo(reactivarBtn.dataset.id, true);
+      toast(`${reactivarBtn.dataset.nombre} reactivado`);
       render();
     }
   } catch (err) {

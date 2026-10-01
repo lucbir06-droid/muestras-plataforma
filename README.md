@@ -82,6 +82,13 @@ profe ve solo a los suyos y a los "sin asignar").
   comidas del plan de nutrición…), asociada a su ficha.
 - **Datos compartidos de verdad**: alumnos, bitácora, agenda, pagos, asistencia,
   check-ins y evidencias viven en Supabase (antes vivían en el navegador de cada quien).
+- **Dar de baja**: el dueño puede dar de baja a un alumno desde su ficha (deja de
+  aparecer en el roster, asistencia y avisos de pago) sin borrar su historial — y
+  reactivarlo cuando quiera. Para borrarlo de verdad (irreversible) sigue existiendo
+  "Eliminar" en Dueños → Todos los alumnos.
+- **Monto a pagar**: el dueño puede avisarle a un alumno, desde su ficha, cuánto le
+  toca pagar — queda como "Pago pendiente" y el alumno lo ve al instante en su
+  suscripción con el monto exacto.
 
 ## Puesta en marcha (una sola vez)
 
