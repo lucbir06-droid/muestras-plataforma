@@ -1,7 +1,6 @@
-import { Store, toYMD } from "./store.js?v=21";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=21";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=21";
-import { sb } from "./supabase-client.js?v=21";
+import { Store, toYMD } from "./store.js?v=22";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=22";
+import { sb } from "./supabase-client.js?v=22";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +14,12 @@ import { sb } from "./supabase-client.js?v=21";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=21" en los imports de arriba son para que el navegador de
+   Los "?v=22" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
-   (este archivo, store.js, config.js, planes.js o
+   (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=21" en el proyecto (app/index.html, store.js e
+   aparezca "?v=22" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -430,7 +429,7 @@ function wireAuthForms() {
         }
         // avisa a Millán por email que se creó una cuenta — no bloquea el
         // alta ni se le muestra nada a quien se está registrando si falla
-        if (WEB3FORMS_ACCESS_KEY) {
+        {
           const rolLabel = { alumno: "Alumno o papá/mamá", profe: "Profe", dueño: "Dueño" }[form.rol.value] || form.rol.value;
           notificarEmail({
             subject: `Nueva cuenta — ${form.nombre.value.trim()} (${rolLabel})`,
@@ -797,19 +796,24 @@ function resizeImage(file, maxDim, quality) {
   });
 }
 
-// avisa a Millán por email (Web3Forms) — solo si ya está configurada la Access Key.
-// Sin adjuntos: Web3Forms free no permite attachments ("Pro feature") y
-// mandarlo tiraba error en TODOS los check-in. Si hay foto, se manda el
-// link (ya está pública en Supabase) en el texto del mensaje.
-async function notificarEmail({ subject, message }) {
-  const fd = new FormData();
-  fd.append("access_key", WEB3FORMS_ACCESS_KEY);
-  fd.append("subject", subject);
-  fd.append("from_name", "Millán Academy · Panel");
-  fd.append("message", message);
-  const res = await fetch("https://api.web3forms.com/submit", { method: "POST", body: fd });
-  const json = await res.json();
-  if (!json.success) throw new Error(json.message || "error");
+// avisa a Millán por email — llama a la Edge Function "notificar-email"
+// (supabase/functions/notificar-email), que manda el correo con Resend.
+// La Access Key de Resend vive como secret en Supabase, nunca en el
+// navegador. Viaja autenticada sola (sb.functions.invoke manda la sesión
+// de quien está logueado), así que solo la puede usar la app.
+async function notificarEmail({ subject, message, fotoBlob }) {
+  const fotoBase64 = fotoBlob ? await blobABase64(fotoBlob) : null;
+  const { data, error } = await sb.functions.invoke("notificar-email", { body: { subject, message, fotoBase64 } });
+  if (error) throw error;
+  if (!data?.success) throw new Error(data?.message || "error");
+}
+function blobABase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(new Error("no se pudo leer la foto"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 /* ---------------- check-in / check-out ---------------- */
@@ -834,12 +838,6 @@ function Checkin() {
         </div>
         <button class="btn btn-primary btn-sm" type="submit">${icon("i-camera")} Enviar check-in</button>
       </form>
-      ${!WEB3FORMS_ACCESS_KEY ? `
-        <div class="mp-note" style="max-width:460px;margin-top:14px;">
-          <b>Todavía no está conectado el email de Millán.</b> El registro ya queda
-          guardado aquí abajo, pero para que también llegue por email hace falta una
-          Access Key gratis de <b>web3forms.com</b> pegada en <code>assets/js/config.js</code>.
-        </div>` : ""}
     </div>
 
     <div class="block">
@@ -889,7 +887,7 @@ async function handleCheckin(form) {
   let fotoBlob, registro;
   try {
     fotoBlob = await resizeImage(file, 1400, 0.82);
-    registro = await Store.addCheckin({ nombre, sede, tipo: "entrada", fotoBlob, estado: WEB3FORMS_ACCESS_KEY ? "enviando" : "guardado" });
+    registro = await Store.addCheckin({ nombre, sede, tipo: "entrada", fotoBlob, estado: "enviando" });
     toast("Check-in guardado");
   } catch (err) {
     toast(errMsg(err));
@@ -897,7 +895,6 @@ async function handleCheckin(form) {
     return;
   }
   render();
-  if (!WEB3FORMS_ACCESS_KEY) return;
 
   try {
     await notificarEmail({
@@ -905,6 +902,7 @@ async function handleCheckin(form) {
       message: `${nombre} llegó a la sede ${sede} y subió su foto de check-in.\n\n` +
         `Fecha: ${new Date(registro.fecha).toLocaleString("es-MX")}\n` +
         (registro.fotoUrl ? `Foto: ${registro.fotoUrl}` : ""),
+      fotoBlob,
     });
     await Store.updateCheckin(registro.id, { estado: "enviado" });
     toast("Millán fue notificado por email");
@@ -995,7 +993,7 @@ async function handleCheckout(form) {
         fecha: new Date(`${fecha}T12:00:00`).toISOString(),
       });
     }
-    registro = await Store.addCheckin({ nombre: perfil.nombre, sede, tipo: "salida", resumen, estado: WEB3FORMS_ACCESS_KEY ? "enviando" : "guardado" });
+    registro = await Store.addCheckin({ nombre: perfil.nombre, sede, tipo: "salida", resumen, estado: "enviando" });
     toast("Check-out registrado — reportes enviados");
   } catch (err) {
     toast(errMsg(err));
@@ -1003,7 +1001,6 @@ async function handleCheckout(form) {
     return;
   }
   render();
-  if (!WEB3FORMS_ACCESS_KEY) return;
 
   try {
     await notificarEmail({ subject: `Check-out — ${perfil.nombre} en ${sede}`, message: resumen });

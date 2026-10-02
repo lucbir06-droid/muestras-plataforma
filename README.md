@@ -22,9 +22,9 @@ assets/css/app.css         layout y componentes de la app
 assets/js/app.js           router, roles y todas las pantallas
 assets/js/store.js         datos (Supabase) con copia en memoria
 assets/js/planes.js        precios y (cuando existan) links de pago de Mercado Pago
-assets/js/config.js        Access Key de Web3Forms (aviso por email a Millán)
 assets/js/supabase-client.js  conexión a Supabase
 supabase/schema.sql        tablas, roles y permisos (se pega en Supabase)
+supabase/functions/notificar-email/  aviso por email a Millán (Resend, ver abajo)
 mockups/index.html        las 4 muestras de estilo originales (archivo)
 ```
 
@@ -138,9 +138,28 @@ No es necesaria para la seguridad de los datos. Si se quiere que entren sin
 confirmar el correo: Supabase → **Authentication → Sign In / Providers → Email** →
 apagar **"Confirm email"**.
 
-### 4. Aviso por email de los check-ins / check-outs
+### 4. Aviso por email de los check-ins / check-outs / cuentas nuevas
 
-Ver `assets/js/config.js` (Access Key gratis de web3forms.com con el correo de Millán).
+Se manda con [Resend](https://resend.com) a través de una Edge Function de Supabase
+(`supabase/functions/notificar-email/`) — la Access Key de Resend nunca toca el
+navegador, vive como secret del proyecto. Puesta en marcha (una sola vez):
+
+1. Cuenta gratis en resend.com → **Domains → Add Domain** → agregar
+   `millanacademy.com` (o un subdominio tipo `mail.millanacademy.com`).
+2. Pegar los registros DNS (TXT/CNAME) que da Resend en Cloudflare, y esperar a
+   que el dominio quede **"Verified"**.
+3. Crear una **API Key** en Resend y guardarla en Supabase → **Edge Functions →
+   Secrets**, con el nombre `RESEND_API_KEY`.
+4. Pegar el código de `supabase/functions/notificar-email/index.ts` en Supabase →
+   **Edge Functions → Create function** (nombre: `notificar-email`) y publicar —
+   no hace falta instalar la CLI de Supabase.
+5. Revisar en ese mismo archivo que `TO` tenga el correo real de Millán y `FROM`
+   use el dominio que verificaste.
+
+Por qué Resend y no un formulario tipo Web3Forms/EmailJS: todos esos bloquean
+adjuntar la foto del check-in detrás de un plan pago ("Pro feature"). Resend es
+gratis hasta 3,000 correos/mes y sí manda adjuntos, pero por eso necesita esta
+función intermedia en vez de un simple `fetch` desde el navegador.
 
 ### 5. Cobrar con Mercado Pago
 
