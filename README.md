@@ -89,6 +89,11 @@ profe ve solo a los suyos y a los "sin asignar").
 - **Monto a pagar**: el dueño puede avisarle a un alumno, desde su ficha, cuánto le
   toca pagar — queda como "Pago pendiente" y el alumno lo ve al instante en su
   suscripción con el monto exacto.
+- **Hábitos Premium**: reemplaza lo que era "Evidencias" — add-on pago de $249
+  MXN/mes (aparte de la mensualidad) para subir entrenamiento, recuperación y
+  nutrición. Solo quien lo tiene activo puede subir hábitos nuevos; el dueño lo
+  activa desde la ficha del alumno cuando confirma el cobro. Falta pegar el link
+  de la suscripción de Mercado Pago (ver `assets/js/planes.js`).
 
 ## Puesta en marcha (una sola vez)
 
@@ -142,6 +147,14 @@ Ver `assets/js/config.js` (Access Key gratis de web3forms.com con el correo de M
 Crear un **Link de pago** por plan en Mercado Pago (Cobrar → Link de pago, con el
 precio real) y pegarlo en `assets/js/planes.js`, en el `linkPago` del plan. Los
 planes sin link mandan a la inscripción manual.
+
+Para **Hábitos Premium** (cobro recurrente, no un pago único) hace falta un
+**plan de suscripción** en vez de un link de pago normal: Mercado Pago → Tu
+negocio → Suscripciones → Crear plan de suscripción, $249 MXN mensual. Pegar
+el link en `assets/js/planes.js`, en `HABITOS_PREMIUM.linkPago`. Mientras esté
+vacío se muestra el precio pero el alumno no puede pagar todavía; el dueño
+igual puede activarlo a mano desde la ficha del alumno (Dar de baja y Activar
+Hábitos Premium están en el mismo lugar).
 
 ## App Store y Google Play
 

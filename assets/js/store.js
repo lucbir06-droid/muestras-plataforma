@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=18";
+import { sb } from "./supabase-client.js?v=19";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -85,6 +85,7 @@ const mapAlumno = (r) => ({
   evaluacion: r.evaluacion || { tactica: 0, tecnica: 0, fisico: 0, comentarios: "" },
   alta: r.alta, codigoVinculo: r.codigo_vinculo,
   fechaPagoInicial: r.fecha_pago_inicial, periodicidadPago: r.periodicidad_pago,
+  habitosPremium: r.habitos_premium,
 });
 const mapBitacora = (r) => ({ id: r.id, alumnoId: r.alumno_id, tipo: r.tipo, nota: r.nota, autor: r.autor, fecha: r.fecha });
 // la fecha de una reserva es un día (sin hora): la dejamos al mediodía local para que ninguna zona horaria la corra de día
@@ -223,6 +224,13 @@ export const Store = {
   // quedan intactos) — a diferencia de eliminarAlumno, que sí borra todo.
   async cambiarActivo(alumnoId, activo) {
     const { error } = await sb.from("alumnos").update({ activo }).eq("id", alumnoId);
+    if (error) throw error;
+    await cargar("alumnos");
+  },
+  // el dueño prende/apaga el add-on de Hábitos Premium a mano, cuando
+  // confirma que se cobró la suscripción de Mercado Pago
+  async cambiarHabitosPremium(alumnoId, habitosPremium) {
+    const { error } = await sb.from("alumnos").update({ habitos_premium: habitosPremium }).eq("id", alumnoId);
     if (error) throw error;
     await cargar("alumnos");
   },

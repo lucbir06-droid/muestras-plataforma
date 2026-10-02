@@ -135,6 +135,12 @@ alter table public.alumnos add column if not exists fecha_pago_inicial date;
 alter table public.alumnos add column if not exists periodicidad_pago text
   check (periodicidad_pago in ('mensual', '6meses', 'anual'));
 
+-- Hábitos Premium: add-on pago aparte de la mensualidad (ver Evidencias/
+-- Hábitos en app.js). Lo activa el dueño a mano cuando confirma el cobro
+-- de la suscripción de Mercado Pago — igual que el resto de los pagos,
+-- no hay webhook que lo prenda solo.
+alter table public.alumnos add column if not exists habitos_premium boolean not null default false;
+
 create table if not exists public.alumno_usuarios (
   alumno_id uuid not null references public.alumnos(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,

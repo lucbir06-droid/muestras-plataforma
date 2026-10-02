@@ -51,6 +51,26 @@ export const PLANES = [
   },
 ];
 
+// Add-on de Hábitos Premium ($249 MXN/mes, aparte de la mensualidad de
+// la sede): reemplaza y mejora la sección de Evidencias — solo para
+// quien lo paga. Se cobra con un plan de SUSCRIPCIÓN de Mercado Pago
+// (no un link de pago común) para que se renueve solo cada mes.
+//
+// Cómo crear el link (una sola vez, sin programar):
+// 1. Mercado Pago → Tu negocio → Suscripciones → Crear plan de suscripción.
+// 2. Nombre "Hábitos Premium", cobro recurrente mensual de $249 MXN.
+// 3. Copiar el link y pegarlo aquí abajo en "linkPago".
+//
+// Mientras "linkPago" esté vacío, se muestra el precio pero el botón no
+// cobra todavía — hay que activarlo a mano desde la ficha del alumno
+// (ver AlumnoDetail en app.js) una vez que la academia confirme el pago.
+export const HABITOS_PREMIUM = {
+  nombre: "Hábitos Premium",
+  moneda: "MXN",
+  precioMensual: 249,
+  linkPago: "",
+};
+
 export function fmtMXN(n) {
   return "$" + n.toLocaleString("es-MX") + " MXN";
 }

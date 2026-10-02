@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=18";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=18";
-import { PLANES, fmtMXN, encontrarDuracion } from "./planes.js?v=18";
-import { sb } from "./supabase-client.js?v=18";
+import { Store, toYMD } from "./store.js?v=19";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=19";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=19";
+import { sb } from "./supabase-client.js?v=19";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=18";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=18" en los imports de arriba son para que el navegador de
+   Los "?v=19" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=18" en el proyecto (app/index.html, store.js e
+   aparezca "?v=19" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -51,7 +51,7 @@ const NAV = [
   { path: "/checkin", label: "Check-in", icon: "i-camera", roles: STAFF, countKey: "checkinsError" },
   { path: "/checkout", label: "Check-out", icon: "i-exit", roles: STAFF },
   { path: "/asistencia", label: "Asistencia", icon: "i-list", roles: STAFF },
-  { path: "/evidencias", label: "Evidencias", icon: "i-task", roles: TODOS },
+  { path: "/evidencias", label: "Hábitos", icon: "i-task", roles: TODOS },
   { path: "/alumnos", label: "Alumnos", icon: "i-users", roles: STAFF },
   { path: "/agenda", label: "Agenda", icon: "i-calendar", roles: TODOS },
   { path: "/clases-prueba", label: "Clases de prueba", icon: "i-play", roles: TODOS, countKey: "solicitudesPendientes" },
@@ -80,7 +80,7 @@ const TIPOS_SLOT = [
 ];
 const SEDES_AGENDA = [...Store.SEDES, "Online"];
 const METODOS_PAGO = ["Mercado Pago", "Stripe", "PayPal", "Wise", "Efectivo", "Transferencia"];
-const TIPOS_EVIDENCIA = ["Gym", "Nutrición", "Otro"];
+const TIPOS_EVIDENCIA = ["Entrenamiento", "Recuperación", "Nutrición"];
 
 /* ---------------- helpers ---------------- */
 function esc(s) {
@@ -223,7 +223,7 @@ function render() {
     title = "Asistencia";
     html = Asistencia();
   } else if (path === "/evidencias") {
-    title = "Evidencias";
+    title = "Hábitos";
     html = Evidencias();
   } else if (path === "/alumnos") {
     title = "Alumnos";
@@ -720,7 +720,7 @@ function resumenAlumno(a) {
           <p style="font-size:.88rem;color:var(--ink-soft);margin-top:6px;">${esc(ultimo.nota)}</p>
         </div>` : ""}
       <div class="row-actions">
-        <a class="btn btn-primary btn-sm" href="#/evidencias">${icon("i-task")} Subir evidencia</a>
+        <a class="btn btn-primary btn-sm" href="#/evidencias">${icon("i-task")} ${a.habitosPremium ? "Subir hábito" : "Hábitos Premium"}</a>
         <a class="btn btn-ghost btn-sm" href="#/alumnos/${a.id}">Ver reportes y ficha</a>
         <a class="btn btn-ghost btn-sm" href="#/pagos">Mi suscripción</a>
       </div>
@@ -1060,42 +1060,76 @@ function Asistencia() {
     </div>`;
 }
 
-/* ---------------- evidencias (gym, nutrición…) ---------------- */
+/* ---------------- hábitos premium (entrenamiento, recuperación, nutrición) ----------------
+   Reemplaza lo que antes era "Evidencias": ahora es un add-on pago
+   aparte de la mensualidad (ver HABITOS_PREMIUM en planes.js) — solo
+   quien lo tiene activo puede subir hábitos nuevos. El dueño lo activa
+   a mano desde la ficha del alumno cuando confirma el cobro (ver
+   AlumnoDetail / cambiarHabitosPremium). */
 
 function Evidencias() {
   const alumnos = Store.alumnos();
   const evidencias = Store.evidencias();
   if (!alumnos.length && esAlumno()) return AlumnoSinAlumno();
+
+  if (esAlumno() && !alumnos.some((a) => a.habitosPremium)) return HabitosUpsell(evidencias);
+
+  const alumnosPremium = esStaff() ? Store.alumnosActivos().filter((a) => a.habitosPremium) : alumnos;
   return `
     <div class="block">
       <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
-        Aquí se sube la prueba de que se hizo lo que el profe pidió — fue al gym
-        tal día, su comida del plan de nutrición, etc. Queda guardado con foto,
-        fecha y comentario para que el profe lo revise.
+        Hábitos Premium: la prueba de que se hizo lo que el profe pidió en
+        <b>entrenamiento</b>, <b>recuperación</b> o <b>nutrición</b>. Queda guardado con
+        foto, fecha y comentario para que el profe lo revise.
       </p>
+      ${alumnosPremium.length ? `
       <form class="card" data-action="evidencia" style="max-width:460px;">
         <div class="field"><label>Alumno</label>
-          <select name="alumnoId" required>${alumnoOptions()}</select></div>
-        <div class="field"><label>Tipo</label>
+          <select name="alumnoId" required>${alumnosPremium.map((a) => `<option value="${a.id}">${esc(a.nombre)} · ${esc(a.categoria || "")}</option>`).join("")}</select></div>
+        <div class="field"><label>Hábito</label>
           <select name="tipo">${TIPOS_EVIDENCIA.map((t) => `<option>${t}</option>`).join("")}</select>
         </div>
-        <div class="field"><label>Comentario</label><textarea name="comentario" placeholder="Ej. Fui al gym, hice pierna 45 min"></textarea></div>
+        <div class="field"><label>Comentario</label><textarea name="comentario" placeholder="Ej. Entrenamiento de fuerza, 45 min"></textarea></div>
         <div class="field"><label>Foto</label><input name="foto" type="file" accept="image/*" capture="environment" required /></div>
-        <button class="btn btn-primary btn-sm" type="submit" ${alumnos.length ? "" : "disabled"}>${icon("i-task")} Subir evidencia</button>
-      </form>
+        <button class="btn btn-primary btn-sm" type="submit">${icon("i-task")} Subir hábito</button>
+      </form>` : `<div class="empty">${esDueno() ? "Todavía no hay alumnos con Hábitos Premium activo." : "No tienes alumnos con Hábitos Premium activo."}</div>`}
     </div>
 
     <div class="block">
-      <div class="block-head"><h3>${esAlumno() ? "Mis evidencias" : "Evidencias recientes"}</h3></div>
+      <div class="block-head"><h3>${esAlumno() ? "Mis hábitos" : "Hábitos recientes"}</h3></div>
       <div class="list">
-        ${evidencias.length ? evidencias.map(evidenciaRow).join("") : `<div class="empty">Todavía no hay evidencias.</div>`}
+        ${evidencias.length ? evidencias.map(evidenciaRow).join("") : `<div class="empty">Todavía no hay registros.</div>`}
       </div>
     </div>
   `;
 }
 
+function HabitosUpsell(evidencias) {
+  return `
+    <div class="block">
+      <div class="card" style="max-width:520px;">
+        <div class="row-title" style="font-size:1.05rem;">${esc(HABITOS_PREMIUM.nombre)}</div>
+        <p style="font-size:.86rem;color:var(--ink-soft);margin:10px 0 14px;max-width:56ch;">
+          Seguimiento de tus hábitos de <b>entrenamiento</b>, <b>recuperación</b> y
+          <b>nutrición</b>, revisado por tu profe — una herramienta más para progresar,
+          aparte de tu mensualidad.
+        </p>
+        <div class="price" style="margin-bottom:14px;">${fmtMXN(HABITOS_PREMIUM.precioMensual)} <small>/ mes</small></div>
+        ${HABITOS_PREMIUM.linkPago
+          ? `<a class="btn btn-primary btn-sm" href="${HABITOS_PREMIUM.linkPago}" target="_blank" rel="noopener">Suscribirme</a>`
+          : `<p style="font-size:.78rem;color:var(--muted);">Todavía no está conectado el cobro — pídele a la academia que te active Hábitos Premium.</p>`}
+      </div>
+    </div>
+    ${evidencias.length ? `
+    <div class="block">
+      <div class="block-head"><h3>Mis hábitos (de antes de Hábitos Premium)</h3></div>
+      <div class="list">${evidencias.map(evidenciaRow).join("")}</div>
+    </div>` : ""}
+  `;
+}
+
 function evidenciaRow(e) {
-  const tipoKind = e.tipo === "Gym" ? "ok" : e.tipo === "Nutrición" ? "warn" : "muted";
+  const tipoKind = e.tipo === "Entrenamiento" ? "ok" : e.tipo === "Nutrición" ? "warn" : "muted";
   return `
     <div class="row-card">
       ${e.fotoUrl
@@ -1122,7 +1156,7 @@ async function handleEvidencia(form) {
   try {
     const fotoBlob = await resizeImage(file, 1280, 0.8);
     await Store.addEvidencia({ alumnoId, alumnoNombre: alumno.nombre, tipo, comentario, fotoBlob });
-    toast("Evidencia subida");
+    toast("Hábito subido");
   } catch (err) {
     toast(errMsg(err));
   }
@@ -1309,10 +1343,14 @@ function AlumnoDetail(id) {
         <button class="btn btn-ghost btn-sm" type="submit">Avisarle el monto</button>
         <p style="width:100%;font-size:.72rem;color:var(--muted);margin:0;">Queda como "Pago pendiente" y ${esc(a.nombre)} lo ve de inmediato en su suscripción, con el monto exacto.</p>
       </form>
+      <button class="btn btn-ghost btn-sm" data-action="${a.habitosPremium ? "quitar-habitos-premium" : "activar-habitos-premium"}" data-id="${a.id}" data-nombre="${esc(a.nombre)}">
+        ${a.habitosPremium ? "Quitar Hábitos Premium" : "Activar Hábitos Premium"}
+      </button>
       <button class="btn btn-ghost btn-sm" data-action="${a.activo === false ? "reactivar-alumno" : "dar-de-baja"}" data-id="${a.id}" data-nombre="${esc(a.nombre)}">
         ${a.activo === false ? "Reactivar alumno" : "Dar de baja"}
       </button>
     </div>
+    ${a.habitosPremium ? `<div class="mp-note" style="margin-bottom:24px;"><b>${esc(a.nombre)} tiene Hábitos Premium activo</b> — puede subir entrenamiento, recuperación y nutrición en esa sección.</div>` : ""}
     ${a.activo === false ? `<div class="mp-note" style="margin-bottom:24px;"><b>${esc(a.nombre)} está dado de baja.</b> No aparece en el roster ni en los avisos de pago, pero su historial sigue intacto.</div>` : ""}` : ""}
 
     <div class="stats">
@@ -1405,8 +1443,8 @@ function AlumnoDetail(id) {
       </div>` : ""}
 
     <div class="block">
-      <div class="block-head"><h3>Evidencias</h3><a href="#/evidencias">Subir nueva →</a></div>
-      ${evidencias.length ? `<div class="list">${evidencias.map(evidenciaRow).join("")}</div>` : `<div class="empty">Todavía no hay evidencias.</div>`}
+      <div class="block-head"><h3>Hábitos</h3><a href="#/evidencias">Ver más →</a></div>
+      ${evidencias.length ? `<div class="list">${evidencias.map(evidenciaRow).join("")}</div>` : `<div class="empty">${a.habitosPremium ? "Todavía no hay registros." : "No tiene Hábitos Premium activo."}</div>`}
     </div>
   `;
 }
@@ -1522,7 +1560,8 @@ function SolicitudForm(titulo, bajada) {
 // alumno/papá sin ningún alumno ligado todavía: en vez de pedirle un código,
 // lo mandamos derecho a reservar su clase de prueba. En cuanto el dueño la
 // confirma, se crea el alumno y se liga esta cuenta sola — ahí se desbloquea
-// el resto de la app (agenda, evidencias, chat, suscripción).
+// el resto de la app (agenda, reportes, chat, suscripción — Hábitos
+// Premium es aparte, ver Evidencias()/HabitosUpsell más abajo).
 function AlumnoSinAlumno() {
   const misSolicitudes = Store.solicitudes().filter((s) => s.userId === perfil?.id);
   const pendiente = misSolicitudes.find((s) => s.estado === "pendiente");
@@ -1531,7 +1570,7 @@ function AlumnoSinAlumno() {
   if (pendiente) {
     return `<div class="mp-note">
       <b>Tu solicitud de clase de prueba está en revisión.</b> En cuanto la academia la confirme
-      vas a poder ver tu agenda, subir evidencias, usar el chat y todo lo demás.
+      vas a poder ver tu agenda, tus reportes, usar el chat y todo lo demás.
     </div>`;
   }
   const aviso = rechazada
@@ -1541,7 +1580,7 @@ function AlumnoSinAlumno() {
     : "";
   return aviso + SolicitudForm(
     "Reserva tu clase de prueba",
-    "Para activar tu cuenta (agenda, evidencias, chat, suscripción) primero pide tu clase de prueba. En cuanto la academia la confirme, se desbloquea todo.",
+    "Para activar tu cuenta (agenda, reportes, chat, suscripción) primero pide tu clase de prueba. En cuanto la academia la confirme, se desbloquea todo.",
   );
 }
 
@@ -2334,6 +2373,19 @@ view.addEventListener("click", async (e) => {
     if (reactivarBtn) {
       await Store.cambiarActivo(reactivarBtn.dataset.id, true);
       toast(`${reactivarBtn.dataset.nombre} reactivado`);
+      render();
+    }
+    const activarHabitosBtn = e.target.closest("[data-action='activar-habitos-premium']");
+    if (activarHabitosBtn) {
+      await Store.cambiarHabitosPremium(activarHabitosBtn.dataset.id, true);
+      toast(`Hábitos Premium activado para ${activarHabitosBtn.dataset.nombre}`);
+      render();
+    }
+    const quitarHabitosBtn = e.target.closest("[data-action='quitar-habitos-premium']");
+    if (quitarHabitosBtn) {
+      if (!confirm(`${quitarHabitosBtn.dataset.nombre} deja de poder subir hábitos nuevos. Lo que ya subió no se borra. ¿Quitar Hábitos Premium?`)) return;
+      await Store.cambiarHabitosPremium(quitarHabitosBtn.dataset.id, false);
+      toast(`Hábitos Premium desactivado para ${quitarHabitosBtn.dataset.nombre}`);
       render();
     }
   } catch (err) {
