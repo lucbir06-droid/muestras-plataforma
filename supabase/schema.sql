@@ -354,6 +354,11 @@ create table if not exists public.recordatorios_enviados (
   enviado_en timestamptz not null default now(),
   unique (alumno_id, tipo, fecha_venc)
 );
+-- "alumno_5dias"/"alumno_3dias": avisos por email al propio alumno/papá
+-- (al correo que registraron), aparte del resumen que recibe Millán.
+alter table public.recordatorios_enviados drop constraint if exists recordatorios_enviados_tipo_check;
+alter table public.recordatorios_enviados add constraint recordatorios_enviados_tipo_check
+  check (tipo in ('por_vencer', 'vencido', 'alumno_5dias', 'alumno_3dias'));
 
 -- Check-in (llegada, con foto) y check-out (salida, con resumen)
 create table if not exists public.checkins (

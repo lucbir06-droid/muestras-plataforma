@@ -1,7 +1,9 @@
-// Millán Academy — avisa a Millán por email (check-in, check-out, cuentas
-// nuevas) usando Resend. La llama el panel con sb.functions.invoke, así
-// que viaja autenticada con la sesión de quien la dispara: no hace falta
-// nada más para que un desconocido de internet no pueda usarla para
+// Millán Academy — avisa por email (check-in, check-out, cuentas nuevas,
+// avisos de pago) usando Resend. Por default le manda a Millán; si viene
+// un "to" en el body (ej. recordatorio de pago al propio alumno/papá) se
+// manda ahí en vez de a Millán. La llama el panel con sb.functions.invoke,
+// así que viaja autenticada con la sesión de quien la dispara: no hace
+// falta nada más para que un desconocido de internet no pueda usarla para
 // mandar spam con nuestra cuenta de Resend.
 //
 // RESEND_API_KEY vive como secret de este proyecto (Supabase → Edge
@@ -17,7 +19,8 @@
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const FROM = "Millán Academy <notificaciones@millanacademy.com>";
-const TO = "millanacademymx@gmail.com";
+const TO_MILLAN = "millanacademymx@gmail.com";
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,12 +31,13 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { subject, message, fotoBase64 } = await req.json();
+    const { subject, message, fotoBase64, to } = await req.json();
     if (!subject || !message) throw new Error("Falta subject o message");
+    if (to && !EMAIL_VALIDO.test(to)) throw new Error("El correo del destinatario no es válido");
 
     const body: Record<string, unknown> = {
       from: FROM,
-      to: [TO],
+      to: [to || TO_MILLAN],
       subject,
       text: message,
     };

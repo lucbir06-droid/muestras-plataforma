@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=22";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=22";
-import { sb } from "./supabase-client.js?v=22";
+import { Store, toYMD } from "./store.js?v=23";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=23";
+import { sb } from "./supabase-client.js?v=23";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=22";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=22" en los imports de arriba son para que el navegador de
+   Los "?v=23" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=22" en el proyecto (app/index.html, store.js e
+   aparezca "?v=23" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -517,8 +517,10 @@ async function route() {
 
 // una vez por día (por pestaña), si sos dueño: revisa qué alumnos vencen en
 // 3 días o ya vencieron y todavía no se avisó, y le manda a Millán un solo
-// email con el resumen. Cada aviso se manda una sola vez (se marca en
-// recordatorios_enviados) aunque abra la app varias veces el mismo día.
+// email con el resumen. Además, a los 5 y a los 3 días, le manda un
+// recordatorio directo al propio alumno/papá (al correo que registraron).
+// Cada aviso se manda una sola vez (se marca en recordatorios_enviados)
+// aunque abra la app varias veces el mismo día.
 let avisosRevisadosHoy = null;
 async function revisarAvisosPagos() {
   const hoyStr = toYMD(new Date());
@@ -538,6 +540,19 @@ async function revisarAvisosPagos() {
       } else if (dias < 0) {
         if (await Store.intentarMarcarRecordatorio(a.id, "vencido", toYMD(venc))) {
           lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sede}) — VENCIÓ el ${fmtDateLong(venc)} y todavía no hay un pago nuevo registrado.`);
+        }
+      }
+      // aparte del resumen para Millán, un recordatorio directo al propio
+      // alumno/papá (al correo que registraron) a los 5 y a los 3 días
+      if (a.correo && (dias === 5 || dias === 3)) {
+        const tipo = dias === 5 ? "alumno_5dias" : "alumno_3dias";
+        if (await Store.intentarMarcarRecordatorio(a.id, tipo, toYMD(venc))) {
+          await notificarEmail({
+            to: a.correo,
+            subject: `Tu pago vence en ${dias} días — Millán Academy`,
+            message: `Hola ${a.nombre}!\n\nTu próxima fecha de pago en Millán Academy es el ${fmtDateLong(venc)} (en ${dias} días).\n\n` +
+              `Podés pagar desde la app, en "Mi suscripción", para no perder el acceso.\n\n— Millán Academy`,
+          }).catch((err) => console.warn("No se pudo avisar por email a", a.nombre, err));
         }
       }
     }
@@ -801,9 +816,9 @@ function resizeImage(file, maxDim, quality) {
 // La Access Key de Resend vive como secret en Supabase, nunca en el
 // navegador. Viaja autenticada sola (sb.functions.invoke manda la sesión
 // de quien está logueado), así que solo la puede usar la app.
-async function notificarEmail({ subject, message, fotoBlob }) {
+async function notificarEmail({ subject, message, fotoBlob, to }) {
   const fotoBase64 = fotoBlob ? await blobABase64(fotoBlob) : null;
-  const { data, error } = await sb.functions.invoke("notificar-email", { body: { subject, message, fotoBase64 } });
+  const { data, error } = await sb.functions.invoke("notificar-email", { body: { subject, message, fotoBase64, to } });
   if (error) throw error;
   if (!data?.success) throw new Error(data?.message || "error");
 }

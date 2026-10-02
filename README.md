@@ -77,7 +77,7 @@ profe ve solo a los suyos y a los "sin asignar").
   queda el historial por día y por alumno.
 - **Check-out del profe**: al terminar, marca asistencia, escribe el **reporte de
   cada alumno** y lo envía. Los reportes le llegan a cada alumno/papá en su panel y
-  Millán recibe el resumen (por email si está conectado Web3Forms).
+  Millán recibe el resumen por email (ver "Aviso por email" más abajo).
 - **Evidencias**: el alumno sube foto de que hizo lo que se le pidió (gym,
   comidas del plan de nutrición…), asociada a su ficha.
 - **Datos compartidos de verdad**: alumnos, bitácora, agenda, pagos, asistencia,
@@ -89,6 +89,9 @@ profe ve solo a los suyos y a los "sin asignar").
 - **Monto a pagar**: el dueño puede avisarle a un alumno, desde su ficha, cuánto le
   toca pagar — queda como "Pago pendiente" y el alumno lo ve al instante en su
   suscripción con el monto exacto.
+- **Recordatorio de pago por email al alumno**: aparte del resumen que recibe
+  Millán, cada alumno/papá recibe un correo directo (al correo que registraron)
+  cuando faltan **5 días** y cuando faltan **3 días** para su fecha de corte.
 - **Hábitos Premium**: reemplaza lo que era "Evidencias" — add-on pago de $249
   MXN/mes (aparte de la mensualidad) para subir entrenamiento, recuperación y
   nutrición. Solo quien lo tiene activo puede subir hábitos nuevos; el dueño lo
