@@ -156,15 +156,34 @@ navegador, vive como secret del proyecto. Puesta en marcha (una sola vez):
 4. Pegar el código de `supabase/functions/notificar-email/index.ts` en Supabase →
    **Edge Functions → Create function** (nombre: `notificar-email`) y publicar —
    no hace falta instalar la CLI de Supabase.
-5. Revisar en ese mismo archivo que `TO` tenga el correo real de Millán y `FROM`
-   use el dominio que verificaste.
+5. Revisar en ese mismo archivo que `TO_MILLAN` tenga el correo real de Millán y
+   `FROM` use el dominio que verificaste.
 
 Por qué Resend y no un formulario tipo Web3Forms/EmailJS: todos esos bloquean
 adjuntar la foto del check-in detrás de un plan pago ("Pro feature"). Resend es
 gratis hasta 3,000 correos/mes y sí manda adjuntos, pero por eso necesita esta
 función intermedia en vez de un simple `fetch` desde el navegador.
 
-### 5. Cobrar con Mercado Pago
+### 5. Avisos de pago automáticos (sin depender de que alguien abra la app)
+
+El resumen de pagos para Millán y los recordatorios a los alumnos (5 y 3 días
+antes de su fecha de corte) normalmente se revisan cuando el dueño abre el
+panel — si nadie entra ese día, ese aviso puntual se pierde. Para que corra
+solo, todos los días, sin que nadie tenga que entrar:
+
+1. Pegar `supabase/functions/revisar-avisos-pago/index.ts` en Supabase → **Edge
+   Functions → Create function** (nombre: `revisar-avisos-pago`) y publicar.
+2. Supabase → **Database → Cron Jobs → New Job**:
+   - Tipo: **Supabase Edge Function**
+   - Función: `revisar-avisos-pago`
+   - Horario: una vez al día (ej. `0 15 * * *` = todos los días a las 9am hora
+     de México — ajustar según el huso horario que use el proyecto).
+
+Las dos versiones (la del panel y la del Cron) comparten la misma tabla de
+"ya se avisó", así que nunca se manda el mismo aviso dos veces aunque las dos
+corran el mismo día.
+
+### 6. Cobrar con Mercado Pago
 
 Crear un **Link de pago** por plan en Mercado Pago (Cobrar → Link de pago, con el
 precio real) y pegarlo en `assets/js/planes.js`, en el `linkPago` del plan. Los

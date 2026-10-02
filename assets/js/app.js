@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=23";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=23";
-import { sb } from "./supabase-client.js?v=23";
+import { Store, toYMD } from "./store.js?v=24";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=24";
+import { sb } from "./supabase-client.js?v=24";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=23";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=23" en los imports de arriba son para que el navegador de
+   Los "?v=24" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=23" en el proyecto (app/index.html, store.js e
+   aparezca "?v=24" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -521,6 +521,14 @@ async function route() {
 // recordatorio directo al propio alumno/papá (al correo que registraron).
 // Cada aviso se manda una sola vez (se marca en recordatorios_enviados)
 // aunque abra la app varias veces el mismo día.
+//
+// Esto SOLO corre si alguien con cuenta de dueño abre el panel ese día
+// exacto — si nadie entra, el aviso se pierde (no se "atrasa" ni se
+// recupera después). Por eso también existe la versión automática en
+// supabase/functions/revisar-avisos-pago/, disparada por un Cron de
+// Supabase: hace exactamente lo mismo pero sola, sin depender de que
+// nadie use la app. Las dos comparten la tabla recordatorios_enviados,
+// así que nunca se duplica un aviso aunque corran el mismo día.
 let avisosRevisadosHoy = null;
 async function revisarAvisosPagos() {
   const hoyStr = toYMD(new Date());
