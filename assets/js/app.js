@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=19";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=19";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=19";
-import { sb } from "./supabase-client.js?v=19";
+import { Store, toYMD } from "./store.js?v=20";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=20";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=20";
+import { sb } from "./supabase-client.js?v=20";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=19";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=19" en los imports de arriba son para que el navegador de
+   Los "?v=20" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=19" en el proyecto (app/index.html, store.js e
+   aparezca "?v=20" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -906,8 +906,9 @@ async function handleCheckin(form) {
     await Store.updateCheckin(registro.id, { estado: "enviado" });
     toast("Millán fue notificado por email");
   } catch (err) {
+    console.error("notificarEmail (check-in):", err);
     await Store.updateCheckin(registro.id, { estado: "error" }).catch(() => {});
-    toast("No se pudo notificar por email — el check-in quedó guardado igual");
+    toast(`No se pudo notificar por email (${err.message || "error desconocido"}) — el check-in quedó guardado igual`);
   }
   render();
 }
@@ -1006,8 +1007,9 @@ async function handleCheckout(form) {
     await Store.updateCheckin(registro.id, { estado: "enviado" });
     toast("Millán fue notificado por email");
   } catch (err) {
+    console.error("notificarEmail (check-out):", err);
     await Store.updateCheckin(registro.id, { estado: "error" }).catch(() => {});
-    toast("No se pudo notificar por email — el check-out quedó guardado igual");
+    toast(`No se pudo notificar por email (${err.message || "error desconocido"}) — el check-out quedó guardado igual`);
   }
   render();
 }
