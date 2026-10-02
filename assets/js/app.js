@@ -1,7 +1,7 @@
-import { Store, toYMD } from "./store.js?v=20";
-import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=20";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=20";
-import { sb } from "./supabase-client.js?v=20";
+import { Store, toYMD } from "./store.js?v=21";
+import { WEB3FORMS_ACCESS_KEY } from "./config.js?v=21";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=21";
+import { sb } from "./supabase-client.js?v=21";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -15,12 +15,12 @@ import { sb } from "./supabase-client.js?v=20";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=20" en los imports de arriba son para que el navegador de
+   Los "?v=21" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, config.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=20" en el proyecto (app/index.html, store.js e
+   aparezca "?v=21" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -797,14 +797,16 @@ function resizeImage(file, maxDim, quality) {
   });
 }
 
-// avisa a Millán por email (Web3Forms) — solo si ya está configurada la Access Key
-async function notificarEmail({ subject, message, adjunto }) {
+// avisa a Millán por email (Web3Forms) — solo si ya está configurada la Access Key.
+// Sin adjuntos: Web3Forms free no permite attachments ("Pro feature") y
+// mandarlo tiraba error en TODOS los check-in. Si hay foto, se manda el
+// link (ya está pública en Supabase) en el texto del mensaje.
+async function notificarEmail({ subject, message }) {
   const fd = new FormData();
   fd.append("access_key", WEB3FORMS_ACCESS_KEY);
   fd.append("subject", subject);
   fd.append("from_name", "Millán Academy · Panel");
   fd.append("message", message);
-  if (adjunto) fd.append("attachment", adjunto, "checkin.jpg");
   const res = await fetch("https://api.web3forms.com/submit", { method: "POST", body: fd });
   const json = await res.json();
   if (!json.success) throw new Error(json.message || "error");
@@ -900,8 +902,9 @@ async function handleCheckin(form) {
   try {
     await notificarEmail({
       subject: `Check-in — ${nombre} en ${sede}`,
-      message: `${nombre} llegó a la sede ${sede} y subió su foto de check-in.\n\nFecha: ${new Date(registro.fecha).toLocaleString("es-MX")}`,
-      adjunto: fotoBlob,
+      message: `${nombre} llegó a la sede ${sede} y subió su foto de check-in.\n\n` +
+        `Fecha: ${new Date(registro.fecha).toLocaleString("es-MX")}\n` +
+        (registro.fotoUrl ? `Foto: ${registro.fotoUrl}` : ""),
     });
     await Store.updateCheckin(registro.id, { estado: "enviado" });
     toast("Millán fue notificado por email");
