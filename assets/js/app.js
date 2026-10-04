@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=26";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=26";
-import { sb } from "./supabase-client.js?v=26";
+import { Store, toYMD } from "./store.js?v=27";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=27";
+import { sb } from "./supabase-client.js?v=27";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=26";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=26" en los imports de arriba son para que el navegador de
+   Los "?v=27" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=26" en el proyecto (app/index.html, store.js e
+   aparezca "?v=27" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -145,6 +145,12 @@ function alumnoOptions(selectedId) {
   return Store.alumnosActivos()
     .map((a) => `<option value="${a.id}" ${a.id === selectedId ? "selected" : ""}>${esc(a.nombre)} · ${esc(a.categoria || "")}</option>`)
     .join("");
+}
+// divisiones válidas para un alumno según TODAS sus sedes (la misma
+// división tiene que existir en cada una — ej. Polanco no tiene 3ra/4ta)
+function categoriasParaSedes(sedes) {
+  if (!sedes?.length) return Store.CATEGORIAS;
+  return sedes.map((s) => Store.SEDE_CATEGORIAS[s] || []).reduce((acc, cats) => acc.filter((c) => cats.includes(c)));
 }
 function avgAvance(alumno) {
   if (!alumno.objetivos?.length) return 0;
@@ -547,11 +553,11 @@ async function revisarAvisosPagos() {
       const dias = Math.round((venc - hoy) / 86400000);
       if (dias === 3) {
         if (await Store.intentarMarcarRecordatorio(a.id, "por_vencer", toYMD(venc))) {
-          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sede}) — vence en 3 días, el ${fmtDateLong(venc)}.`);
+          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sedes.join("/")}) — vence en 3 días, el ${fmtDateLong(venc)}.`);
         }
       } else if (dias < 0) {
         if (await Store.intentarMarcarRecordatorio(a.id, "vencido", toYMD(venc))) {
-          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sede}) — VENCIÓ el ${fmtDateLong(venc)} y todavía no hay un pago nuevo registrado.`);
+          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sedes.join("/")}) — VENCIÓ el ${fmtDateLong(venc)} y todavía no hay un pago nuevo registrado.`);
         }
       }
       // aparte del resumen para Millán, un recordatorio directo al propio
@@ -678,7 +684,7 @@ function alumnoCard(a) {
         <div class="avatar-sm">${esc(a.avatar)}</div>
         <div>
           <div class="name">${esc(a.nombre)}</div>
-          <div class="meta">${esc(a.categoria)} · ${esc(a.sede)}</div>
+          <div class="meta">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</div>
         </div>
       </div>
       ${sus ? `<div class="meta" style="margin-top:8px;">${badge(sus.vence ? (sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Corte: ${fmtDate(sus.vence)}`) : sus.texto, sus.kind)}</div>` : ""}
@@ -732,7 +738,7 @@ function resumenAlumno(a) {
         <div class="avatar-sm" style="width:52px;height:52px;font-size:.95rem;">${esc(a.avatar)}</div>
         <div style="flex:1;min-width:180px;">
           <div class="row-title" style="font-size:1.05rem;">${esc(a.nombre)}</div>
-          <div class="row-sub">${esc(a.categoria)} · ${esc(a.sede)}${a.coach ? ` · profe ${esc(a.coach)}` : ""}</div>
+          <div class="row-sub">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}${a.coach ? ` · profe ${esc(a.coach)}` : ""}</div>
         </div>
       </div>
       <div class="stats">
@@ -959,7 +965,7 @@ function filaAsistencia(a, presente, conReporte) {
 
 function Checkout() {
   const { sede, fecha } = ctxCheckout;
-  const alumnos = Store.alumnosActivos().filter((a) => a.sede === sede);
+  const alumnos = Store.alumnosActivos().filter((a) => a.sedes.includes(sede));
   const yaMarcados = new Map(Store.asistenciasDe(fecha, sede).map((a) => [a.alumnoId, a.presente]));
   const salidas = Store.checkins().filter((c) => c.tipo === "salida").slice(0, 5);
   return `
@@ -990,7 +996,7 @@ function Checkout() {
 async function handleCheckout(form) {
   const sede = form.elements.sede.value;
   const fecha = form.elements.fecha.value;
-  const alumnos = Store.alumnosActivos().filter((a) => a.sede === sede);
+  const alumnos = Store.alumnosActivos().filter((a) => a.sedes.includes(sede));
   if (!alumnos.length) return;
   form.querySelector("button[type=submit]").disabled = true;
 
@@ -1045,7 +1051,7 @@ async function handleCheckout(form) {
 
 function Asistencia() {
   const { sede, fecha, categoria } = ctxAsistencia;
-  const alumnos = Store.alumnosActivos().filter((a) => a.sede === sede && (!categoria || a.categoria === categoria));
+  const alumnos = Store.alumnosActivos().filter((a) => a.sedes.includes(sede) && (!categoria || a.categoria === categoria));
   const yaMarcados = new Map(Store.asistenciasDe(fecha, sede).map((a) => [a.alumnoId, a.presente]));
 
   // sesiones recientes: cuántos asistieron cada día
@@ -1213,8 +1219,10 @@ function AlumnosList() {
             </div>
           </div>
           <div class="field-row">
-            <div class="field"><label>Sede de entrenamiento</label>
-              <select name="sede">${Store.SEDES.map((s) => `<option>${s}</option>`).join("")}</select>
+            <div class="field"><label>Sede(s) de entrenamiento</label>
+              <div style="display:flex;gap:14px;flex-wrap:wrap;padding-top:8px;">
+                ${Store.SEDES.map((s) => `<label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" name="sedes" value="${esc(s)}" /> ${esc(s)}</label>`).join("")}
+              </div>
             </div>
             <div class="field"><label>Profe a cargo</label>
               <select name="coachId"><option value="">Sin asignar</option>${coaches.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("")}</select>
@@ -1262,7 +1270,7 @@ function AlumnosList() {
         <div class="list" style="margin-top:14px;">
           ${deBaja.map((a) => `
             <div class="row-card">
-              <a class="grow" href="#/alumnos/${a.id}"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sede)}</div></a>
+              <a class="grow" href="#/alumnos/${a.id}"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sedes.join(" / "))}</div></a>
               <button class="btn btn-ghost btn-sm" data-action="reactivar-alumno" data-id="${a.id}" data-nombre="${esc(a.nombre)}">Reactivar</button>
             </div>`).join("")}
         </div>
@@ -1274,7 +1282,7 @@ function AlumnosList() {
 // una sección por sede, y dentro de cada una una sub-sección por división —
 // así es mucho más fácil encontrar a un alumno que en una sola lista larga.
 function alumnosPorSede(sede, alumnos) {
-  const deLaSede = alumnos.filter((a) => a.sede === sede);
+  const deLaSede = alumnos.filter((a) => a.sedes.includes(sede));
   if (!deLaSede.length) return "";
   const divisiones = Store.SEDE_CATEGORIAS[sede] || Store.CATEGORIAS;
   const sinDivision = deLaSede.filter((a) => !divisiones.includes(a.categoria));
@@ -1316,7 +1324,7 @@ function AlumnoDetail(id) {
       <div class="avatar-sm" style="width:56px;height:56px;font-size:1rem;">${esc(a.avatar)}</div>
       <div style="flex:1;min-width:200px;">
         <div class="row-title" style="font-size:1.1rem;">${esc(a.nombre)}</div>
-        <div class="row-sub">${esc(a.categoria)} · ${esc(a.sede)}${a.coach ? ` · profe ${esc(a.coach)}` : ""} · alta hace ${daysAgo(a.alta)} días</div>
+        <div class="row-sub">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}${a.coach ? ` · profe ${esc(a.coach)}` : ""} · alta hace ${daysAgo(a.alta)} días</div>
         ${staff && (a.telefono || a.correo) ? `<div class="row-sub" style="margin-top:4px;">${[a.telefono, a.correo].filter(Boolean).map(esc).join(" · ")}</div>` : ""}
         ${a.tallaPlayera ? `<div class="row-sub">Playera: ${esc(a.tallaPlayera)}</div>` : ""}
       </div>
@@ -1342,8 +1350,16 @@ function AlumnoDetail(id) {
         <div class="field" style="margin:0;"><label>División</label>
           <select name="categoria">
             <option value="">Sin división</option>
-            ${(Store.SEDE_CATEGORIAS[a.sede] || Store.CATEGORIAS).map((c) => `<option ${c === a.categoria ? "selected" : ""}>${esc(c)}</option>`).join("")}
+            ${categoriasParaSedes(a.sedes).map((c) => `<option ${c === a.categoria ? "selected" : ""}>${esc(c)}</option>`).join("")}
           </select></div>
+        <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
+      </form>
+      <form data-action="asignar-sedes" data-alumno="${a.id}" style="display:flex;gap:10px;align-items:flex-end;">
+        <div class="field" style="margin:0;"><label>Sede(s)</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:6px;">
+            ${Store.SEDES.map((s) => `<label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" name="sedes" value="${esc(s)}" ${a.sedes.includes(s) ? "checked" : ""} /> ${esc(s)}</label>`).join("")}
+          </div>
+        </div>
         <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
       </form>
       <form data-action="corregir-fecha-pago" data-alumno="${a.id}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
@@ -1657,7 +1673,7 @@ function Reportes() {
         <a class="card row-card" href="#/alumnos/${a.id}" style="align-items:flex-start;">
           <div class="avatar-sm">${esc(a.avatar)}</div>
           <div class="grow">
-            <div class="row-title">${esc(a.nombre)} <span style="color:var(--muted);font-weight:500;">· ${esc(a.categoria)} · ${esc(a.sede)}</span></div>
+            <div class="row-title">${esc(a.nombre)} <span style="color:var(--muted);font-weight:500;">· ${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</span></div>
             <div style="margin-top:10px;display:grid;gap:8px;max-width:420px;">
               ${barra("Táctica", ev.tactica)}${barra("Técnica", ev.tecnica)}${barra("Físico", ev.fisico)}
             </div>
@@ -1701,7 +1717,7 @@ function Pagos() {
       <div class="list">
         ${fechas.map(({ a, vence }) => `
           <a class="row-card" href="#/alumnos/${a.id}">
-            <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sede)}</div></div>
+            <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sedes.join(" / "))}</div></div>
             ${badge(vence < new Date(new Date().toDateString()) ? `Venció ${fmtDate(vence)}` : `Corte: ${fmtDate(vence)}`, vence < new Date(new Date().toDateString()) ? "crit" : "ok")}
           </a>`).join("")}
       </div>
@@ -1979,7 +1995,7 @@ function Duenos() {
         <div class="list" style="margin-bottom:18px;">
           ${vencidos.map(({ a, vence }) => `
             <a class="row-card" href="#/alumnos/${a.id}">
-              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sede)}</div></div>
+              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</div></div>
               ${badge(`Venció ${fmtDate(vence)}`, "crit")}
             </a>`).join("")}
         </div>` : ""}
@@ -1988,7 +2004,7 @@ function Duenos() {
         <div class="list">
           ${porVencer.map(({ a, vence }) => `
             <a class="row-card" href="#/alumnos/${a.id}">
-              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sede)}</div></div>
+              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</div></div>
               ${badge(`Corte ${fmtDate(vence)}`, "warn")}
             </a>`).join("")}
         </div>` : ""}
@@ -2080,7 +2096,7 @@ function Duenos() {
               <tr>
                 <td><a class="rowlink" href="#/alumnos/${a.id}">${esc(a.nombre)}</a></td>
                 <td>${esc(a.categoria)}</td>
-                <td>${esc(a.sede)}</td>
+                <td>${esc(a.sedes.join(" / "))}</td>
                 <td>${esc(a.coach || "—")}</td>
                 <td>${esc(a.telefono || "—")}</td>
                 <td><button class="btn btn-ghost btn-sm" data-action="eliminar-alumno" data-id="${a.id}" data-nombre="${esc(a.nombre)}">Eliminar</button></td>
@@ -2226,7 +2242,7 @@ function Chat(fullPath) {
   // coinciden con la sede + división de su(s) propio(s) alumno(s) — y
   // ninguno todavía si no le asignaron división (eso lo hace el dueño)
   const canales = canalesChat().filter((c) =>
-    esStaff() || alumnos.some((a) => a.sede === c.sede && a.categoria === c.categoria)
+    esStaff() || alumnos.some((a) => a.sedes.includes(c.sede) && a.categoria === c.categoria)
   );
 
   const tabParam = params.get("tab") || "";
@@ -2270,9 +2286,11 @@ view.addEventListener("submit", async (e) => {
 
   try {
     if (action === "add-alumno") {
+      const sedes = [...form.querySelectorAll('input[name="sedes"]:checked')].map((el) => el.value);
+      if (!sedes.length) { toast("Elegí al menos una sede"); return; }
       const coach = Store.coaches().find((c) => c.id === data.coachId);
       const a = await Store.addAlumno({
-        nombre: data.nombre.trim(), categoria: data.categoria, sede: data.sede, coach: coach?.nombre, coachId: data.coachId || null,
+        nombre: data.nombre.trim(), categoria: data.categoria, sedes, coach: coach?.nombre, coachId: data.coachId || null,
         moneda: data.moneda, telefono: data.telefono?.trim() || "", correo: data.correo?.trim() || "", tallaPlayera: data.tallaPlayera,
       });
       if (data.metodoAlta === "Transferencia" && Number(data.monto) > 0) {
@@ -2294,6 +2312,11 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "asignar-categoria") {
       await Store.asignarCategoria(form.dataset.alumno, data.categoria);
       toast("División actualizada");
+    } else if (action === "asignar-sedes") {
+      const sedes = [...form.querySelectorAll('input[name="sedes"]:checked')].map((el) => el.value);
+      if (!sedes.length) { toast("Elegí al menos una sede"); return; }
+      await Store.asignarSedes(form.dataset.alumno, sedes);
+      toast("Sedes actualizadas");
     } else if (action === "declarar-fecha-pago") {
       await Store.declararFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
       toast("Fecha de pago guardada");
@@ -2313,7 +2336,7 @@ view.addEventListener("submit", async (e) => {
       toast("Ficha actualizada");
     } else if (action === "guardar-asistencia") {
       const { sede, fecha, categoria } = ctxAsistencia;
-      const lista = Store.alumnosActivos().filter((a) => a.sede === sede && (!categoria || a.categoria === categoria));
+      const lista = Store.alumnosActivos().filter((a) => a.sedes.includes(sede) && (!categoria || a.categoria === categoria));
       await Store.guardarAsistencias(fecha, sede, lista.map((a) => ({ alumnoId: a.id, presente: form.elements["presente_" + a.id].checked })), perfil?.nombre);
       toast("Asistencia guardada");
     } else if (action === "generar-horarios") {

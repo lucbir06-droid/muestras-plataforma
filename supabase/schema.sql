@@ -122,6 +122,23 @@ create table if not exists public.alumnos (
 );
 alter table public.alumnos add column if not exists coach_id uuid references public.perfiles(id) on delete set null;
 alter table public.alumnos add column if not exists codigo_vinculo text;
+
+-- un alumno puede entrenar en más de una sede (ej. Polanco Y Metepec, con
+-- la misma división en las dos) — "sede" (una sola) se reemplaza por
+-- "sedes" (lista). Este bloque migra los datos viejos una sola vez: en
+-- cuanto la columna "sede" ya no existe, no hace nada en las corridas
+-- siguientes.
+alter table public.alumnos add column if not exists sedes text[] not null default '{}';
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'alumnos' and column_name = 'sede'
+  ) then
+    update public.alumnos set sedes = array[sede] where sede is not null and sedes = '{}';
+    alter table public.alumnos drop column sede;
+  end if;
+end $$;
 alter table public.alumnos alter column codigo_vinculo set default upper(substr(md5(gen_random_uuid()::text), 1, 8));
 update public.alumnos set codigo_vinculo = upper(substr(md5(gen_random_uuid()::text), 1, 8)) where codigo_vinculo is null;
 create unique index if not exists alumnos_codigo_vinculo_key on public.alumnos (codigo_vinculo);
@@ -211,7 +228,7 @@ as $$
     select 1
     from public.alumnos a
     join public.alumno_usuarios au on au.alumno_id = a.id
-    where au.user_id = auth.uid() and a.sede = p_sede and a.categoria = p_categoria
+    where au.user_id = auth.uid() and p_sede = any(a.sedes) and a.categoria = p_categoria
   );
 $$;
 

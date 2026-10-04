@@ -102,8 +102,12 @@ profe ve solo a los suyos y a los "sin asignar").
   3ra") en vez de un solo canal compartido entre las dos sedes. El staff ve
   los 6; un alumno/papá solo ve el (o los) que coinciden con la sede y
   división de su propio alumno — ninguno hasta que el dueño le asigne
-  división. Si el mismo alumno entrena en las dos sedes (dos fichas
-  distintas ligadas a la misma cuenta), ve los dos canales.
+  división. Si el alumno entrena en las dos sedes, ve los dos canales.
+- **Un alumno puede tener más de una sede**: por ejemplo, uno que entrena en
+  Polanco y en Metepec — ya no hace falta darlo de alta dos veces. La misma
+  división aplica en las dos (Polanco solo llega a 2da, así que un alumno de
+  3ra/4ta en Metepec no se le puede sumar Polanco). El dueño agrega o quita
+  sedes desde la ficha del alumno, igual que el profe a cargo o la división.
 
 ## Puesta en marcha (una sola vez)
 

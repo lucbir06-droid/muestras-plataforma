@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=26";
+import { sb } from "./supabase-client.js?v=27";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -79,7 +79,7 @@ const C = {
 const urlFoto = (bucket, path) => (path ? sb.storage.from(bucket).getPublicUrl(path).data.publicUrl : null);
 
 const mapAlumno = (r) => ({
-  id: r.id, nombre: r.nombre, categoria: r.categoria, sede: r.sede, coach: r.coach, coachId: r.coach_id,
+  id: r.id, nombre: r.nombre, categoria: r.categoria, sedes: r.sedes || [], coach: r.coach, coachId: r.coach_id,
   moneda: r.moneda || "MXN", telefono: r.telefono || "", correo: r.correo || "", tallaPlayera: r.talla_playera || "",
   activo: r.activo, avatar: r.avatar || iniciales(r.nombre), objetivos: r.objetivos || [],
   evaluacion: r.evaluacion || { tactica: 0, tecnica: 0, fisico: 0, comentarios: "" },
@@ -183,11 +183,19 @@ export const Store = {
   alumno(id) { return C.alumnos.find((a) => a.id === id) || null; },
   async addAlumno(d) {
     const [fila] = await insertar("alumnos", {
-      nombre: d.nombre, categoria: d.categoria, sede: d.sede, coach: d.coach || null, coach_id: d.coachId || null,
+      nombre: d.nombre, categoria: d.categoria, sedes: d.sedes, coach: d.coach || null, coach_id: d.coachId || null,
       moneda: d.moneda, telefono: d.telefono, correo: d.correo, talla_playera: d.tallaPlayera, avatar: iniciales(d.nombre),
     });
     await cargar("alumnos");
     return mapAlumno(fila);
+  },
+  // solo el dueño agrega/quita sedes de un alumno — por ejemplo, uno que
+  // entrena en Polanco Y en Metepec (se controla en la UI, igual que la
+  // categoría / el profe a cargo)
+  async asignarSedes(alumnoId, sedes) {
+    const { error } = await sb.from("alumnos").update({ sedes }).eq("id", alumnoId);
+    if (error) throw error;
+    await cargar("alumnos");
   },
   async actualizarEvaluacion(id, patch) {
     const a = this.alumno(id);
@@ -346,7 +354,7 @@ export const Store = {
   // toda la app para esa cuenta sin tener que pedirle ningún código.
   async confirmarSolicitud(s) {
     const [fila] = await insertar("alumnos", {
-      nombre: s.nombre, sede: s.sede, telefono: s.telefono || null, avatar: iniciales(s.nombre),
+      nombre: s.nombre, sedes: [s.sede], telefono: s.telefono || null, avatar: iniciales(s.nombre),
     });
     if (s.userId) {
       const { error } = await sb.from("alumno_usuarios").insert({ alumno_id: fila.id, user_id: s.userId });

@@ -79,7 +79,7 @@ Deno.serve(async () => {
   try {
     const hoy = new Date(new Date().toDateString());
     const [{ data: alumnos, error: e1 }, { data: pagos, error: e2 }] = await Promise.all([
-      supabase.from("alumnos").select("id, nombre, correo, categoria, sede, fecha_pago_inicial, periodicidad_pago").eq("activo", true),
+      supabase.from("alumnos").select("id, nombre, correo, categoria, sedes, fecha_pago_inicial, periodicidad_pago").eq("activo", true),
       supabase.from("pagos").select("alumno_id, estado, periodicidad, fecha").eq("estado", "pagado"),
     ]);
     if (e1) throw e1;
@@ -95,11 +95,11 @@ Deno.serve(async () => {
 
       if (dias === 3) {
         if (await intentarMarcar(a.id, "por_vencer", toYMD(venc))) {
-          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sede}) — vence en 3 días, el ${fechaLarga}.`);
+          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${(a.sedes || []).join("/")}) — vence en 3 días, el ${fechaLarga}.`);
         }
       } else if (dias < 0) {
         if (await intentarMarcar(a.id, "vencido", toYMD(venc))) {
-          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${a.sede}) — VENCIÓ el ${fechaLarga} y todavía no hay un pago nuevo registrado.`);
+          lineas.push(`• ${a.nombre} (${a.categoria || "sin división"} · ${(a.sedes || []).join("/")}) — VENCIÓ el ${fechaLarga} y todavía no hay un pago nuevo registrado.`);
         }
       }
 
