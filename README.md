@@ -92,7 +92,7 @@ profe ve solo a los suyos y a los "sin asignar").
 - **Recordatorio de pago por email al alumno**: aparte del resumen que recibe
   Millán, cada alumno/papá recibe un correo directo (al correo que registraron)
   cuando faltan **5 días** y cuando faltan **3 días** para su fecha de corte.
-- **Hábitos Premium**: reemplaza lo que era "Evidencias" — add-on pago de $249
+- **Hábitos Premium**: reemplaza lo que era "Evidencias" — add-on pago de $349
   MXN/mes (aparte de la mensualidad) para subir entrenamiento, recuperación y
   nutrición. Solo quien lo tiene activo puede subir hábitos nuevos; el dueño lo
   activa desde la ficha del alumno cuando confirma el cobro. Falta pegar el link
@@ -202,7 +202,7 @@ planes sin link mandan a la inscripción manual.
 
 Para **Hábitos Premium** (cobro recurrente, no un pago único) hace falta un
 **plan de suscripción** en vez de un link de pago normal: Mercado Pago → Tu
-negocio → Suscripciones → Crear plan de suscripción, $249 MXN mensual. Pegar
+negocio → Suscripciones → Crear plan de suscripción, $349 MXN mensual. Pegar
 el link en `assets/js/planes.js`, en `HABITOS_PREMIUM.linkPago`. Mientras esté
 vacío se muestra el precio pero el alumno no puede pagar todavía; el dueño
 igual puede activarlo a mano desde la ficha del alumno (Dar de baja y Activar
