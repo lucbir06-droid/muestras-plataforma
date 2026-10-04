@@ -40,7 +40,9 @@ svg{width:1em;height:1em;}
   font-family:var(--display);font-size:.72rem;font-weight:600;letter-spacing:.02em;
   text-transform:uppercase;color:var(--muted);border-top:1px solid var(--line-soft);padding-top:16px;
 }
-.side-back svg{width:15px;height:15px;}
+.side-back svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;}
+/* íconos de línea (no rellenos) dentro de un botón */
+.ico-linea svg{stroke:currentColor;fill:none;stroke-width:1.7;}
 .side-back:hover{color:var(--ink-soft);}
 
 @media (max-width:900px){

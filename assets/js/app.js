@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=29";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=29";
-import { sb } from "./supabase-client.js?v=29";
+import { Store, toYMD } from "./store.js?v=30";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=30";
+import { sb } from "./supabase-client.js?v=30";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=29";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=29" en los imports de arriba son para que el navegador de
+   Los "?v=30" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=29" en el proyecto (app/index.html, store.js e
+   aparezca "?v=30" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -581,7 +581,20 @@ async function cerrarSesion() {
   // este teléfono deja de recibir los avisos de la cuenta que sale
   if (pushToken) await sb.rpc("quitar_dispositivo", { p_token: pushToken }).then(() => {}, () => {});
   pushUsuario = null;
-  await sb.auth.signOut();
+  // signOut() le avisa al servidor y recién después borra la sesión de este
+  // dispositivo: si esa llamada falla o se queda colgada (mala conexión, otra
+  // pestaña abierta trabando la sesión), el botón parecía no hacer nada. Si
+  // en unos segundos no salió, se borra la sesión local a mano y se recarga.
+  const limite = new Promise((ok) => setTimeout(() => ok({ error: new Error("tiempo agotado") }), 4000));
+  const res = await Promise.race([sb.auth.signOut().catch((error) => ({ error })), limite]);
+  if (res?.error || session) {
+    console.warn("signOut no terminó, se cierra la sesión local:", res?.error);
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("sb-") && k.includes("auth-token"))
+      .forEach((k) => localStorage.removeItem(k));
+    location.hash = "#/login";
+    location.reload();
+  }
 }
 
 // una vez por día (por pestaña), si sos dueño: revisa qué alumnos vencen en
@@ -2182,7 +2195,7 @@ function MiCuenta() {
         <div class="row-title">${esc(perfil.nombre)}</div>
         <div class="row-sub">${esc(session.user.email)} · ${esc(rolLabel)}</div>
         <div class="row-actions" style="margin-top:16px;">
-          <button class="btn btn-ghost btn-sm" type="button" data-action="cerrar-sesion">${icon("i-exit")} Cerrar sesión</button>
+          <button class="btn btn-ghost btn-sm ico-linea" type="button" data-action="cerrar-sesion">${icon("i-exit")} Cerrar sesión</button>
           <a class="btn btn-ghost btn-sm" href="https://millanacademy.com/privacidad/" target="_blank" rel="noopener">Aviso de privacidad</a>
         </div>
       </div>
