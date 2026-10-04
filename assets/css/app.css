@@ -4,7 +4,9 @@
 
 body{background:var(--bg);}
 
-svg{width:1em;height:1em;}
+/* los íconos del panel son de línea: sin esto, dentro de un botón se veían
+   como una mancha rellena */
+svg{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
 .shell{display:flex;min-height:calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));}
 
 /* ---------------- sidebar ---------------- */
@@ -69,6 +71,25 @@ svg{width:1em;height:1em;}
 
   /* iOS hace zoom (y se queda con zoom) al tocar un campo con letra < 16px */
   input,textarea,select{font-size:16px;}
+
+  /* filas de campos (ej. sede/fecha/categoría en Asistencia): una columna,
+     aunque la vista pida 3 con un style en línea */
+  .field-row{grid-template-columns:1fr !important;}
+  /* iOS le da un ancho propio al campo de fecha y se salía de su columna */
+  input[type="date"], input[type="time"], input[type="datetime-local"]{
+    -webkit-appearance:none;appearance:none;min-width:0;max-width:100%;min-height:46px;text-align:left;
+  }
+  input::-webkit-date-and-time-value{text-align:left;}
+  /* casillas sin marcar: en iOS (modo oscuro) salían como un disco negro */
+  input[type="checkbox"]{
+    -webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:6px;
+    border:1.5px solid var(--muted);background:transparent;display:inline-grid;place-content:center;
+  }
+  input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent);}
+  input[type="checkbox"]:checked::after{
+    content:"";width:6px;height:11px;border:solid var(--on-accent);border-width:0 2.5px 2.5px 0;
+    transform:rotate(45deg) translate(-1px,-1px);
+  }
 
   /* las tablas anchas se deslizan dentro de su tarjeta, no estiran la página */
   table.tbl{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;}

@@ -13,3 +13,6 @@ app/_*
 *.jks
 *.keystore
 *.mobileprovision
+
+# capturas para las tiendas (no van al sitio)
+capturas/
