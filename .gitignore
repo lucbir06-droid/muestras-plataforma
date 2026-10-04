@@ -6,3 +6,10 @@ Thumbs.db
 
 # archivos de prueba locales
 app/_*
+
+# Llaves y certificados de firma: nunca se suben
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
