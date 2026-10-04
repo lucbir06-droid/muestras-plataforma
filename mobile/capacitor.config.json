@@ -1,5 +1,14 @@
 {
   "appId": "com.millanacademy.app",
   "appName": "Millán Academy",
-  "webDir": "www"
+  "webDir": "www",
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
+    }
+  }
 }

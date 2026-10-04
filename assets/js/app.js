@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=30";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=30";
-import { sb } from "./supabase-client.js?v=30";
+import { Store, toYMD } from "./store.js?v=31";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=31";
+import { sb } from "./supabase-client.js?v=31";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=30";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=30" en los imports de arriba son para que el navegador de
+   Los "?v=31" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=30" en el proyecto (app/index.html, store.js e
+   aparezca "?v=31" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -555,10 +555,13 @@ async function iniciarPush(usuario) {
         if (error) console.warn("No se pudo registrar el teléfono para notificaciones:", error.message);
       });
       Push.addListener("registrationError", (err) => console.warn("El teléfono no pudo registrarse para notificaciones:", err));
+      // llegó una notificación con la app abierta: traer lo nuevo
+      Push.addListener("pushNotificationReceived", () => refrescarDatos());
       // tocó la notificación: abrir la sección de la que avisaba
       Push.addListener("pushNotificationActionPerformed", (accion) => {
         const ruta = accion.notification?.data?.ruta;
         if (ruta) location.hash = "#" + ruta;
+        refrescarDatos(); // lo que avisaba la notificación todavía no está cargado
       });
     }
     let permiso = await Push.checkPermissions();
@@ -671,6 +674,24 @@ async function init() {
 }
 
 window.addEventListener("hashchange", route);
+
+// Los datos se cargan una sola vez al entrar. Sin esto, lo que cambiaba otra
+// persona (ej. el dueño te asigna profe, o te llega un mensaje directo) no
+// aparecía hasta cerrar y volver a abrir la app — se notaba sobre todo en el
+// teléfono, donde la app queda abierta de fondo por días.
+let ultimoRefresco = Date.now();
+async function refrescarDatos() {
+  if (!session || !perfil) return;
+  ultimoRefresco = Date.now();
+  await Store.refrescar();
+  if (!session) return;
+  // si está a mitad de llenar un formulario, no redibujar: se borraría lo escrito
+  const escribiendo = document.activeElement?.closest?.("#view form");
+  if (!escribiendo) render();
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && Date.now() - ultimoRefresco > 15000) refrescarDatos();
+});
 
 /* ---------------- panel: dueño / profe ---------------- */
 
@@ -2298,31 +2319,62 @@ function ChatDMStaff(params) {
     </div>`;
 }
 
+// Las conversaciones directas de un alumno: la de su profe asignado (aunque
+// todavía esté vacía) + cualquier otra que ya tenga mensajes. Un dueño puede
+// abrir un hilo con cualquier profe (o consigo mismo), y antes esos mensajes
+// le llegaban como notificación al papá pero no los podía ver en ningún lado,
+// porque acá solo se mostraba el hilo del profe asignado.
+function hilosDirectosDeAlumno(alumno) {
+  const hilos = [];
+  if (alumno.coachId) hilos.push({ profeId: alumno.coachId, nombre: alumno.coach || "tu profe" });
+  for (const m of Store.mensajes()) {
+    if (m.tipo !== "directo" || m.alumnoId !== alumno.id || hilos.some((h) => h.profeId === m.profeId)) continue;
+    // el nombre del profe sale de algún mensaje que él mismo haya escrito en el hilo
+    const suyo = Store.mensajes().find((x) => x.tipo === "directo" && x.alumnoId === alumno.id && x.profeId === m.profeId && x.autorId === m.profeId);
+    hilos.push({ profeId: m.profeId, nombre: suyo?.autorNombre || "la academia" });
+  }
+  return hilos;
+}
+
 function ChatDMAlumno(alumnos, params) {
   const alumnoId = params.get("alumno") || alumnos[0]?.id || "";
   const alumno = Store.alumno(alumnoId);
   if (!alumno) return `<div class="empty">No encontramos a tu alumno vinculado.</div>`;
-  if (!alumno.coachId) {
+  const hilos = hilosDirectosDeAlumno(alumno);
+  if (!hilos.length) {
     return `<div class="empty">${esc(alumno.nombre)} todavía no tiene profe asignado — en cuanto la academia le asigne uno vas a poder escribirle acá.</div>`;
   }
-  const picker = alumnos.length > 1 ? `
+  // sin uno elegido, abre el hilo donde está el mensaje más reciente
+  const ultimo = Store.mensajes().filter((m) => m.tipo === "directo" && m.alumnoId === alumno.id)
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
+  const hilo = hilos.find((h) => h.profeId === params.get("profe"))
+    || hilos.find((h) => h.profeId === ultimo?.profeId) || hilos[0];
+  const ir = `location.hash='#/chat?tab=dm&alumno='+document.getElementById('selAlumnoDM').value+'&profe='+(document.getElementById('selHiloDM')?.value||'')`;
+  const picker = alumnos.length > 1 || hilos.length > 1 ? `
     <div class="chat-dm-picker">
+      ${alumnos.length > 1 ? `
       <div class="field"><label>Alumno</label>
-        <select onchange="location.hash='#/chat?tab=dm&alumno='+this.value">
+        <select id="selAlumnoDM" onchange="location.hash='#/chat?tab=dm&alumno='+this.value">
           ${alumnos.map((a) => `<option value="${a.id}" ${a.id === alumnoId ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}
         </select>
-      </div>
+      </div>` : `<input type="hidden" id="selAlumnoDM" value="${alumnoId}" />`}
+      ${hilos.length > 1 ? `
+      <div class="field"><label>Conversación con</label>
+        <select id="selHiloDM" onchange="${ir}">
+          ${hilos.map((h) => `<option value="${h.profeId}" ${h === hilo ? "selected" : ""}>${esc(h.nombre)}</option>`).join("")}
+        </select>
+      </div>` : ""}
     </div>` : "";
-  const msgs = Store.mensajesDirectos(alumnoId, alumno.coachId);
+  const msgs = Store.mensajesDirectos(alumnoId, hilo.profeId);
   return picker + `
     <div class="chat-panel" style="${picker ? "margin-top:16px;" : ""}">
-      <p style="font-size:.82rem;color:var(--muted);margin:0 0 10px;">Conversación con ${esc(alumno.coach || "tu profe")}</p>
+      <p style="font-size:.82rem;color:var(--muted);margin:0 0 10px;">Conversación con ${esc(hilo.nombre)}</p>
       <div class="chat-messages" id="chatMessages">
-        ${msgs.length ? msgs.map(ChatMensajeBubble).join("") : `<div class="empty">Todavía no hay mensajes. ¡Escríbele a ${esc(alumno.coach || "tu profe")}!</div>`}
+        ${msgs.length ? msgs.map(ChatMensajeBubble).join("") : `<div class="empty">Todavía no hay mensajes. ¡Escríbele a ${esc(hilo.nombre)}!</div>`}
       </div>
       <form data-action="mensaje-directo" class="chat-form">
         <input type="hidden" name="alumnoId" value="${alumnoId}" />
-        <input type="hidden" name="profeId" value="${alumno.coachId}" />
+        <input type="hidden" name="profeId" value="${hilo.profeId}" />
         <input name="contenido" placeholder="Escribe un mensaje…" required autocomplete="off" />
         <button class="btn btn-primary btn-sm" type="submit">Enviar</button>
       </form>

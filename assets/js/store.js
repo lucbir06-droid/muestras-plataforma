@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=30";
+import { sb } from "./supabase-client.js?v=31";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -173,6 +173,9 @@ export const Store = {
     cargandoPara = null;
   },
   recargar(...claves) { return Promise.all(claves.map(cargar)); },
+  // vuelve a traer todas las tablas (lo que cambió otra persona mientras
+  // esta pantalla estaba abierta: profe asignado, pagos, mensajes…)
+  refrescar() { return Promise.all(Object.keys(TABLAS).map(cargar)); },
 
   /* ---- alumnos ---- */
   alumnos() { return C.alumnos; },
@@ -447,6 +450,7 @@ export const Store = {
   },
 
   /* ---- chat (canales por sede+categoría + mensajes directos con un profe) ---- */
+  mensajes() { return C.mensajes; },
   mensajesCategoria(sede, categoria) {
     return C.mensajes.filter((m) => m.tipo === "categoria" && m.sede === sede && m.categoria === categoria)
       .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
