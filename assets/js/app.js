@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=24";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=24";
-import { sb } from "./supabase-client.js?v=24";
+import { Store, toYMD } from "./store.js?v=25";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=25";
+import { sb } from "./supabase-client.js?v=25";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=24";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=24" en los imports de arriba son para que el navegador de
+   Los "?v=25" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=24" en el proyecto (app/index.html, store.js e
+   aparezca "?v=25" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -282,7 +282,11 @@ function iniciarPollChat() {
   chatPollId = setInterval(async () => {
     if (currentPath() !== "/chat" || !session) return detenerPollChat();
     await Store.recargar("mensajes");
-    if (currentPath() === "/chat") render();
+    // si justo estás escribiendo un mensaje, no reconstruyas la pantalla:
+    // antes esto borraba lo que llevabas tecleado a mitad de escribir
+    // (el redibujado reemplaza el <form> entero por uno vacío de nuevo)
+    const escribiendo = document.activeElement?.closest?.(".chat-form");
+    if (currentPath() === "/chat" && !escribiendo) render();
   }, 6000);
 }
 function detenerPollChat() {
