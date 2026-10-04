@@ -439,6 +439,9 @@ create table if not exists public.mensajes (
 -- división compartida entre Polanco y Metepec) — ver Chat()/ChatCategoria()
 -- en app.js.
 alter table public.mensajes add column if not exists sede text;
+-- mensajes de categoría de antes de este cambio, sin sede (no hay forma de
+-- saber a cuál pertenecían) — se borran para poder aplicar la regla nueva.
+delete from public.mensajes where tipo = 'categoria' and sede is null;
 alter table public.mensajes drop constraint if exists mensajes_forma;
 alter table public.mensajes add constraint mensajes_forma check (
   (tipo = 'categoria' and sede is not null and categoria is not null and profe_id is null and alumno_id is null)
