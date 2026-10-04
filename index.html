@@ -22,11 +22,11 @@
   .brand-lockup span{font-family:var(--display);font-weight:700;font-size:1rem;letter-spacing:.02em;color:var(--ink);}
   nav.site-nav{display:flex;align-items:center;gap:26px;}
   .navlinks{display:flex;align-items:center;gap:26px;}
-  nav.site-nav a{
+  nav.site-nav a:not(.btn){
     font-family:var(--display);font-size:.76rem;font-weight:600;letter-spacing:.05em;
     text-transform:uppercase;color:var(--ink-soft);
   }
-  nav.site-nav a:hover{color:var(--accent-2);}
+  nav.site-nav a:not(.btn):hover{color:var(--accent-2);}
   @media (max-width:840px){ nav.site-nav .navlinks{display:none;} }
   .auth-actions{display:flex;gap:10px;align-items:center;}
   .hero-note{margin-top:16px;max-width:52ch;font-size:.88rem;color:var(--muted);}
