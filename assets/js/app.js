@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=31";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=31";
-import { sb } from "./supabase-client.js?v=31";
+import { Store, toYMD } from "./store.js?v=32";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=32";
+import { sb } from "./supabase-client.js?v=32";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=31";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=31" en los imports de arriba son para que el navegador de
+   Los "?v=32" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=31" en el proyecto (app/index.html, store.js e
+   aparezca "?v=32" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1232,6 +1232,13 @@ function Evidencias() {
   `;
 }
 
+// Dentro de la app de iPhone no se muestra ni el precio ni el botón de pago
+// de Hábitos Premium (ni un link a donde pagarlo): es una función digital
+// de la app, y Apple solo deja cobrar esas con su propio sistema de pagos —
+// rechaza la app si ve un cobro externo o una invitación a pagar en otro
+// lado. En la web y en Android se sigue cobrando con Mercado Pago.
+const EN_APP_IPHONE = window.Capacitor?.getPlatform?.() === "ios";
+
 function HabitosUpsell(evidencias) {
   return `
     <div class="block">
@@ -1242,10 +1249,15 @@ function HabitosUpsell(evidencias) {
           <b>nutrición</b>, revisado por tu profe — una herramienta más para progresar,
           aparte de tu mensualidad.
         </p>
+        ${EN_APP_IPHONE ? `
+        <p style="font-size:.82rem;color:var(--muted);">
+          Hábitos Premium se contrata directamente con la academia. Cuando lo tengas activo,
+          aquí vas a poder subir tus hábitos.
+        </p>` : `
         <div class="price" style="margin-bottom:14px;">${fmtMXN(HABITOS_PREMIUM.precioMensual)} <small>/ mes</small></div>
         ${HABITOS_PREMIUM.linkPago
           ? `<a class="btn btn-primary btn-sm" href="${HABITOS_PREMIUM.linkPago}" target="_blank" rel="noopener">Suscribirme</a>`
-          : `<p style="font-size:.78rem;color:var(--muted);">Todavía no está conectado el cobro — pídele a la academia que te active Hábitos Premium.</p>`}
+          : `<p style="font-size:.78rem;color:var(--muted);">Todavía no está conectado el cobro — pídele a la academia que te active Hábitos Premium.</p>`}`}
       </div>
     </div>
     ${evidencias.length ? `
