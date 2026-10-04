@@ -4,8 +4,14 @@
 <dict>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>La app usa la cámara para tomar la foto de llegada del profe (check-in) y las fotos de evidencia de los alumnos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>La app te deja elegir una foto de tu galería para el check-in o para subir una evidencia.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>es</string>
 	<key>CFBundleDisplayName</key>
         <string>Millán Academy</string>
 	<key>CFBundleExecutable</key>

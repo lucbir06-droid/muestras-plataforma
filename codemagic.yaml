@@ -1,0 +1,66 @@
+# =========================================================
+# Millán Academy — compilar la app de iPhone en la nube
+# =========================================================
+# Codemagic (https://codemagic.io) lee este archivo, compila el
+# proyecto de mobile/ios en una Mac suya, lo firma y lo sube a
+# TestFlight. No hace falta tener una Mac.
+#
+# Antes de la primera corrida, en Codemagic:
+#   Teams → Integrations → App Store Connect → agregar una API key
+#   con el nombre "Millan Academy" (el mismo de abajo).
+# Y en App Store Connect tiene que existir la app con el bundle id
+# com.millanacademy.app.
+# =========================================================
+
+workflows:
+  ios-testflight:
+    name: iOS — TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    working_directory: mobile
+    integrations:
+      app_store_connect: Millan Academy
+    environment:
+      groups:
+        # Grupo de variables en Codemagic con CERTIFICATE_PRIVATE_KEY (secreta):
+        # la llave con la que se crea el certificado de distribución. Así se
+        # reusa el mismo certificado en cada compilación.
+        - ios_signing
+      vars:
+        BUNDLE_ID: "com.millanacademy.app"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        # El "Apple ID" numérico de la app (App Store Connect → la app →
+        # App Information). Sin esto, el número de build siempre sale 1 y
+        # la segunda subida se rechaza por repetido.
+        APP_STORE_CONNECT_APP_ID: "6818942869"
+      node: 22
+      xcode: latest
+    scripts:
+      - name: Instalar dependencias
+        script: npm ci
+      - name: Copiar el panel web y sincronizar Capacitor
+        script: node sync-web.js && npx cap sync ios
+      - name: Configurar la firma (crea certificado y perfil si no existen)
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Número de build (el siguiente al último de TestFlight)
+        script: |
+          cd ios/App
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_CONNECT_APP_ID" || echo 0)
+          agvtool new-version -all $((LATEST + 1))
+      - name: Compilar el .ipa
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
