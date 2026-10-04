@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=27";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=27";
-import { sb } from "./supabase-client.js?v=27";
+import { Store, toYMD } from "./store.js?v=28";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=28";
+import { sb } from "./supabase-client.js?v=28";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=27";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=27" en los imports de arriba son para que el navegador de
+   Los "?v=28" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=27" en el proyecto (app/index.html, store.js e
+   aparezca "?v=28" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -60,6 +60,7 @@ const NAV = [
   { path: "/pagos", label: "Pagos", labelAlumno: "Mi suscripción", icon: "i-card", roles: ["dueño", "alumno"], countKey: "pagosPendientes" },
   { path: "/duenos", label: "Dueños", icon: "i-shield", roles: ["dueño"], countKey: "profesPendientes" },
   { path: "/chat", label: "Chat", icon: "i-chat", roles: TODOS },
+  { path: "/cuenta", label: "Mi cuenta", icon: "i-shield", roles: TODOS },
 ];
 
 function itemDeRuta(path) {
@@ -262,6 +263,9 @@ function render() {
   } else if (path === "/chat") {
     title = "Chat";
     html = Chat(currentFullPath());
+  } else if (path === "/cuenta") {
+    title = "Mi cuenta";
+    html = MiCuenta();
   } else {
     title = "No encontrado";
     html = `<div class="empty">No encontramos esa página. <a href="#/" style="color:var(--accent-2)">Volver al panel</a>.</div>`;
@@ -388,6 +392,9 @@ function SignupView(errorMsg) {
         <div class="field"><label>País</label><input name="pais" required placeholder="México" /></div>
         <div class="field"><label>Contraseña</label><input name="password" type="password" required minlength="6" autocomplete="new-password" /></div>
         <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Crear cuenta</button>
+        <p style="font-size:.74rem;color:var(--muted);margin-top:12px;text-align:center;">
+          Al crear tu cuenta aceptas el <a href="https://millanacademy.com/privacidad/" target="_blank" rel="noopener" style="color:var(--accent-2);">aviso de privacidad</a>.
+        </p>
       </form>`);
 }
 
@@ -523,6 +530,58 @@ async function route() {
   }
   render();
   if (esDueno()) revisarAvisosPagos(); // no bloquea el render, se manda en segundo plano
+  iniciarPush(usuario); // idem; solo hace algo dentro de la app del teléfono
+}
+
+/* ---------------- notificaciones push (solo en la app nativa) ---------------- */
+// En el navegador window.Capacitor no existe y todo esto queda apagado. En
+// la app (mobile/), sync-web.js agrega capacitor.js antes de este módulo.
+// Por ahora solo iPhone: en Android el plugin necesita Firebase configurado
+// (google-services.json) y sin eso la app se cierra al pedir el registro.
+const Push = window.Capacitor?.getPlatform?.() === "ios" ? window.Capacitor.registerPlugin("PushNotifications") : null;
+let pushToken = null;      // el "número" de este teléfono para Apple/Google
+let pushUsuario = null;    // a qué cuenta está registrado ahora
+let pushEscuchando = false;
+
+async function iniciarPush(usuario) {
+  if (!Push || pushUsuario === usuario) return;
+  pushUsuario = usuario;
+  try {
+    if (!pushEscuchando) {
+      pushEscuchando = true;
+      Push.addListener("registration", async (t) => {
+        pushToken = t.value;
+        const { error } = await sb.rpc("registrar_dispositivo", { p_token: t.value, p_plataforma: window.Capacitor.getPlatform() });
+        if (error) console.warn("No se pudo registrar el teléfono para notificaciones:", error.message);
+      });
+      Push.addListener("registrationError", (err) => console.warn("El teléfono no pudo registrarse para notificaciones:", err));
+      // tocó la notificación: abrir la sección de la que avisaba
+      Push.addListener("pushNotificationActionPerformed", (accion) => {
+        const ruta = accion.notification?.data?.ruta;
+        if (ruta) location.hash = "#" + ruta;
+      });
+    }
+    let permiso = await Push.checkPermissions();
+    if (permiso.receive === "prompt") permiso = await Push.requestPermissions();
+    if (permiso.receive === "granted") await Push.register();
+  } catch (err) {
+    console.warn("No se pudieron activar las notificaciones:", err);
+  }
+}
+
+// le avisa al resto del canal/hilo que hay un mensaje nuevo. La función del
+// servidor decide sola a quién (busca el último mensaje de esta cuenta), así
+// que acá no se manda ni el texto ni los destinatarios.
+function avisarMensajeNuevo() {
+  sb.functions.invoke("enviar-push", { body: { tipo: "mensaje" } })
+    .catch((err) => console.warn("No se pudo mandar la notificación del mensaje:", err));
+}
+
+async function cerrarSesion() {
+  // este teléfono deja de recibir los avisos de la cuenta que sale
+  if (pushToken) await sb.rpc("quitar_dispositivo", { p_token: pushToken }).then(() => {}, () => {});
+  pushUsuario = null;
+  await sb.auth.signOut();
 }
 
 // una vez por día (por pestaña), si sos dueño: revisa qué alumnos vencen en
@@ -594,7 +653,7 @@ async function init() {
     if (cambio) route();
   });
   const logoutBtn = document.getElementById("logoutBtn");
-  if (logoutBtn) logoutBtn.addEventListener("click", () => sb.auth.signOut());
+  if (logoutBtn) logoutBtn.addEventListener("click", cerrarSesion);
   route();
 }
 
@@ -2114,6 +2173,42 @@ function fmtHora(fecha) {
   return new Date(fecha).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
 }
 
+/* ---------------- mi cuenta ---------------- */
+function MiCuenta() {
+  const rolLabel = { "dueño": "Dueño", "profe": "Profe", "alumno": "Alumno / papá" }[perfil.rol] || perfil.rol;
+  return `
+    <div class="block" style="max-width:520px;">
+      <div class="card">
+        <div class="row-title">${esc(perfil.nombre)}</div>
+        <div class="row-sub">${esc(session.user.email)} · ${esc(rolLabel)}</div>
+        <div class="row-actions" style="margin-top:16px;">
+          <button class="btn btn-ghost btn-sm" type="button" data-action="cerrar-sesion">${icon("i-exit")} Cerrar sesión</button>
+          <a class="btn btn-ghost btn-sm" href="https://millanacademy.com/privacidad/" target="_blank" rel="noopener">Aviso de privacidad</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="block" style="max-width:520px;">
+      <div class="block-head"><h3>Eliminar mi cuenta</h3></div>
+      <form class="card" data-action="eliminar-cuenta" style="border-color:var(--crit);">
+        <p style="font-size:.86rem;color:var(--ink-soft);margin-bottom:12px;">
+          Se borra para siempre tu acceso, tu perfil (nombre, teléfono, país), tus mensajes de chat
+          y los hábitos y fotos que subiste. No se puede deshacer.
+        </p>
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:16px;">
+          La ficha del alumno en la academia (asistencia, reportes y pagos) no se borra con tu cuenta,
+          porque es el registro de la academia y el alumno puede seguir entrenando. Si también quieres
+          que se elimine, pídeselo a la academia.
+        </p>
+        <div class="field">
+          <label>Escribe ELIMINAR para confirmar</label>
+          <input name="confirmacion" required autocomplete="off" autocapitalize="characters" placeholder="ELIMINAR" />
+        </div>
+        <button class="btn btn-sm" type="submit" style="background:var(--crit);color:#fff;">Eliminar mi cuenta</button>
+      </form>
+    </div>`;
+}
+
 function ChatMensajeBubble(m) {
   const mio = m.autorId === perfil?.id;
   const etiquetaRol = m.autorRol === "dueño" ? " · Dueño" : m.autorRol === "profe" ? " · Profe" : "";
@@ -2379,10 +2474,29 @@ view.addEventListener("submit", async (e) => {
       toast("Costos fijos actualizados");
     } else if (action === "mensaje-categoria") {
       await Store.enviarMensajeCategoria(data.sede, data.categoria, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);
+      avisarMensajeNuevo();
       form.reset();
     } else if (action === "mensaje-directo") {
       await Store.enviarMensajeDirecto(data.alumnoId, data.profeId, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);
+      avisarMensajeNuevo();
       form.reset();
+    } else if (action === "eliminar-cuenta") {
+      if (data.confirmacion.trim().toUpperCase() !== "ELIMINAR") { toast("Escribe ELIMINAR para confirmar"); return; }
+      if (!confirm("Tu cuenta se elimina para siempre y no se puede recuperar. ¿Continuar?")) return;
+      const boton = form.querySelector("button[type='submit']");
+      boton.disabled = true; boton.textContent = "Eliminando…";
+      const { data: res, error } = await sb.functions.invoke("eliminar-cuenta");
+      // cuando la función responde con error, el motivo viene en el cuerpo
+      const motivo = res?.message || (await error?.context?.json?.().catch(() => null))?.message;
+      if (error || !res?.success) {
+        boton.disabled = false; boton.textContent = "Eliminar mi cuenta";
+        toast(motivo || "No se pudo eliminar la cuenta. Intenta de nuevo.");
+        return;
+      }
+      pushUsuario = null;
+      await sb.auth.signOut().catch(() => {}); // la cuenta ya no existe: solo limpia la sesión de este dispositivo
+      toast("Tu cuenta fue eliminada");
+      return;
     }
   } catch (err) {
     toast(errMsg(err));
@@ -2392,6 +2506,8 @@ view.addEventListener("submit", async (e) => {
 
 view.addEventListener("click", async (e) => {
   try {
+    if (e.target.closest("[data-action='cerrar-sesion']")) return void cerrarSesion();
+
     const solicitudBtn = e.target.closest("[data-action='solicitud-estado']");
     if (solicitudBtn) {
       if (solicitudBtn.dataset.estado === "confirmada") {

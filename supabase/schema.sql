@@ -678,3 +678,52 @@ drop policy if exists "logueado sube evidencias" on storage.objects;
 drop policy if exists "logueado sube fotos" on storage.objects;
 create policy "logueado sube fotos" on storage.objects for insert to authenticated
   with check (bucket_id in ('evidencias', 'checkins'));
+
+-- ---------------------------------------------------------------
+-- NOTIFICACIONES PUSH — teléfonos donde cada cuenta tiene la app
+-- ---------------------------------------------------------------
+-- Un renglón por teléfono (el "token" lo da Apple/Google al instalar la
+-- app y aceptar notificaciones). La app lo registra al iniciar sesión y lo
+-- quita al cerrarla. Quien manda las notificaciones es la Edge Function
+-- enviar-push (con la service role), nunca el navegador: por eso la tabla
+-- no tiene ninguna política de lectura ni de escritura directa.
+create table if not exists public.dispositivos (
+  token text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  plataforma text not null default 'ios',
+  actualizado_en timestamptz not null default now()
+);
+create index if not exists dispositivos_user_id_idx on public.dispositivos (user_id);
+alter table public.dispositivos enable row level security;
+
+-- Va por función (y no por un insert normal) porque el mismo teléfono
+-- puede cambiar de cuenta: el token ya existe a nombre de la cuenta
+-- anterior y RLS no dejaría "pisar" un renglón ajeno.
+create or replace function public.registrar_dispositivo(p_token text, p_plataforma text)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Necesitas iniciar sesión';
+  end if;
+  insert into public.dispositivos (token, user_id, plataforma)
+  values (p_token, auth.uid(), coalesce(p_plataforma, 'ios'))
+  on conflict (token) do update
+    set user_id = excluded.user_id, plataforma = excluded.plataforma, actualizado_en = now();
+end;
+$$;
+revoke execute on function public.registrar_dispositivo(text, text) from public, anon;
+grant execute on function public.registrar_dispositivo(text, text) to authenticated;
+
+-- al cerrar sesión: ese teléfono deja de recibir avisos de esta cuenta
+create or replace function public.quitar_dispositivo(p_token text)
+returns void
+language sql
+security definer set search_path = public
+as $$
+  delete from public.dispositivos where token = p_token and user_id = auth.uid();
+$$;
+revoke execute on function public.quitar_dispositivo(text) from public, anon;
+grant execute on function public.quitar_dispositivo(text) to authenticated;

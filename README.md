@@ -208,6 +208,22 @@ vacío se muestra el precio pero el alumno no puede pagar todavía; el dueño
 igual puede activarlo a mano desde la ficha del alumno (Dar de baja y Activar
 Hábitos Premium están en el mismo lugar).
 
+### 7. Eliminar cuenta y notificaciones push (app del teléfono)
+
+Las dos van por Edge Functions de Supabase, igual que los correos (pegar el
+código en Supabase → **Edge Functions → Create function** y publicar):
+
+- `supabase/functions/eliminar-cuenta/` — la usa el botón **Mi cuenta →
+  Eliminar mi cuenta** (Apple lo exige). No necesita secrets.
+- `supabase/functions/enviar-push/` — manda las notificaciones al iPhone
+  (mensaje nuevo en el chat, recordatorio de pago). Necesita tres secrets:
+  `APNS_KEY_P8`, `APNS_KEY_ID` y `APNS_TEAM_ID`, que salen de una llave de
+  notificaciones creada en developer.apple.com → **Keys** (ver el encabezado
+  del archivo).
+
+Antes hay que volver a correr `supabase/schema.sql` en el SQL Editor: agrega
+la tabla `dispositivos`, donde se guarda qué teléfono es de cada cuenta.
+
 ## App Store y Google Play
 
 Ya está armado el proyecto de la app nativa en [`mobile/`](mobile/) (con

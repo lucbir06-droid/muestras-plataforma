@@ -75,6 +75,17 @@ async function enviarCorreo(to: string, subject: string, text: string) {
   if (!res.ok) throw new Error(json.message || `Resend respondió ${res.status}`);
 }
 
+// además del correo, una notificación al teléfono de las cuentas ligadas al
+// alumno (si tienen la app instalada) — la manda la función enviar-push
+async function enviarPush(alumnoId: string, titulo: string, cuerpo: string) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/enviar-push`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ tipo: "alumno", alumnoId, titulo, cuerpo, ruta: "/pagos" }),
+  });
+  if (!res.ok) throw new Error(`enviar-push respondió ${res.status}`);
+}
+
 Deno.serve(async () => {
   try {
     const hoy = new Date(new Date().toDateString());
@@ -103,10 +114,15 @@ Deno.serve(async () => {
         }
       }
 
-      if (a.correo && (dias === 5 || dias === 3)) {
+      if (dias === 5 || dias === 3) {
         const tipo = dias === 5 ? "alumno_5dias" : "alumno_3dias";
         if (await intentarMarcar(a.id, tipo, toYMD(venc))) {
-          await enviarCorreo(
+          await enviarPush(
+            a.id,
+            `Tu pago vence en ${dias} días`,
+            `La próxima fecha de pago de ${a.nombre} es el ${fechaLarga}.`,
+          ).catch((err) => console.warn("No se pudo mandar la notificación a", a.nombre, err));
+          if (a.correo) await enviarCorreo(
             a.correo,
             `Tu pago vence en ${dias} días — Millán Academy`,
             `Hola ${a.nombre}!\n\nTu próxima fecha de pago en Millán Academy es el ${fechaLarga} (en ${dias} días).\n\n` +

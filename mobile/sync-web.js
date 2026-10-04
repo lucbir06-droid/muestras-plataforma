@@ -39,6 +39,16 @@ let html = fs.readFileSync(path.join(root, "app", "index.html"), "utf8");
 html = html.replaceAll("../assets/", "./assets/");
 // en la app no existe el sitio público ("../"): el emblema lleva al inicio del panel
 html = html.replaceAll('href="../"', 'href="#/"');
+// el panel no usa bundler, así que el "puente" de Capacitor (lo que deja
+// llamar a los plugins nativos, ej. notificaciones push) se carga como un
+// <script> normal antes del módulo del panel
+const marcaApp = '<script type="module" src="./assets/js/app.js';
+if (!html.includes(marcaApp)) throw new Error("No encontré el <script> de app.js en app/index.html");
+html = html.replace(marcaApp, '<script src="./capacitor.js"></script>\n' + marcaApp);
+fs.copyFileSync(
+  path.join(__dirname, "node_modules", "@capacitor", "core", "dist", "capacitor.js"),
+  path.join(wwwDir, "capacitor.js"),
+);
 fs.writeFileSync(path.join(wwwDir, "index.html"), html);
 
 console.log("✔ mobile/www listo (copiado de app/ + assets/)");
