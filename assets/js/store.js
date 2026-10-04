@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=25";
+import { sb } from "./supabase-client.js?v=26";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -120,7 +120,7 @@ const mapInscripcion = (r) => ({
 const mapObjetivo = (r) => ({ id: r.id, categoria: r.categoria, profe: r.profe, titulo: r.titulo, detalle: r.detalle, fecha: r.fecha });
 const mapPerfil = (r) => ({ id: r.id, nombre: r.nombre, telefono: r.telefono, pais: r.pais, rol: r.rol, rolSolicitado: r.rol_solicitado });
 const mapMensaje = (r) => ({
-  id: r.id, tipo: r.tipo, categoria: r.categoria, profeId: r.profe_id, alumnoId: r.alumno_id,
+  id: r.id, tipo: r.tipo, sede: r.sede, categoria: r.categoria, profeId: r.profe_id, alumnoId: r.alumno_id,
   autorId: r.autor_id, autorNombre: r.autor_nombre, autorRol: r.autor_rol, contenido: r.contenido, fecha: r.creado_en,
 });
 
@@ -438,17 +438,17 @@ export const Store = {
     await cargar("evidencias");
   },
 
-  /* ---- chat (canales por categoría + mensajes directos con un profe) ---- */
-  mensajesCategoria(categoria) {
-    return C.mensajes.filter((m) => m.tipo === "categoria" && m.categoria === categoria)
+  /* ---- chat (canales por sede+categoría + mensajes directos con un profe) ---- */
+  mensajesCategoria(sede, categoria) {
+    return C.mensajes.filter((m) => m.tipo === "categoria" && m.sede === sede && m.categoria === categoria)
       .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   },
   mensajesDirectos(alumnoId, profeId) {
     return C.mensajes.filter((m) => m.tipo === "directo" && m.alumnoId === alumnoId && m.profeId === profeId)
       .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   },
-  async enviarMensajeCategoria(categoria, contenido, autorId, autorNombre, autorRol) {
-    await insertar("mensajes", { tipo: "categoria", categoria, contenido, autor_id: autorId, autor_nombre: autorNombre, autor_rol: autorRol });
+  async enviarMensajeCategoria(sede, categoria, contenido, autorId, autorNombre, autorRol) {
+    await insertar("mensajes", { tipo: "categoria", sede, categoria, contenido, autor_id: autorId, autor_nombre: autorNombre, autor_rol: autorRol });
     await cargar("mensajes");
   },
   async enviarMensajeDirecto(alumnoId, profeId, contenido, autorId, autorNombre, autorRol) {

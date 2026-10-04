@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=25";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=25";
-import { sb } from "./supabase-client.js?v=25";
+import { Store, toYMD } from "./store.js?v=26";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=26";
+import { sb } from "./supabase-client.js?v=26";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=25";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=25" en los imports de arriba son para que el navegador de
+   Los "?v=26" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=25" en el proyecto (app/index.html, store.js e
+   aparezca "?v=26" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -2109,14 +2109,15 @@ function ChatMensajeBubble(m) {
     </div>`;
 }
 
-function ChatCategoria(categoria) {
-  const msgs = Store.mensajesCategoria(categoria);
+function ChatCategoria(sede, categoria) {
+  const msgs = Store.mensajesCategoria(sede, categoria);
   return `
     <div class="chat-panel">
       <div class="chat-messages" id="chatMessages">
         ${msgs.length ? msgs.map(ChatMensajeBubble).join("") : `<div class="empty">Todavía no hay mensajes en este canal — ¡sé el primero en escribir!</div>`}
       </div>
       <form data-action="mensaje-categoria" class="chat-form">
+        <input type="hidden" name="sede" value="${esc(sede)}" />
         <input type="hidden" name="categoria" value="${esc(categoria)}" />
         <input name="contenido" placeholder="Escribe un mensaje…" required autocomplete="off" />
         <button class="btn btn-primary btn-sm" type="submit">Enviar</button>
@@ -2204,22 +2205,40 @@ function ChatDMAlumno(alumnos, params) {
     </div>`;
 }
 
+// las 6 combinaciones reales de sede+división (Polanco: 1ra-2da, Metepec:
+// 1ra-4ta) — un canal de chat es "Polanco · 1ra División", no solo "1ra
+// División", porque cada sede entrena por separado.
+function canalesChat() {
+  const canales = [];
+  for (const sede of Store.SEDES) {
+    for (const categoria of Store.SEDE_CATEGORIAS[sede] || []) canales.push({ sede, categoria });
+  }
+  return canales;
+}
+
 function Chat(fullPath) {
   const query = fullPath.includes("?") ? fullPath.split("?")[1] : "";
   const params = new URLSearchParams(query);
   const alumnos = Store.alumnos();
   if (esAlumno() && !alumnos.length) return AlumnoSinAlumno();
 
-  const tabParam = params.get("tab") || Store.CATEGORIAS[0];
-  const activeCategoria = Store.CATEGORIAS.includes(tabParam) ? tabParam : null;
+  // el staff ve los 6 canales; el alumno/papá solo ve el (o los) que
+  // coinciden con la sede + división de su(s) propio(s) alumno(s) — y
+  // ninguno todavía si no le asignaron división (eso lo hace el dueño)
+  const canales = canalesChat().filter((c) =>
+    esStaff() || alumnos.some((a) => a.sede === c.sede && a.categoria === c.categoria)
+  );
+
+  const tabParam = params.get("tab") || "";
+  const activo = canales.find((c) => tabParam === `${c.sede}|${c.categoria}`) || (tabParam === "dm" ? null : canales[0] || null);
 
   const tabs = [
-    ...Store.CATEGORIAS.map((c) => `<a href="#/chat?tab=${encodeURIComponent(c)}" class="chat-tab ${c === activeCategoria ? "active" : ""}">${esc(c)}</a>`),
-    `<a href="#/chat?tab=dm" class="chat-tab ${!activeCategoria ? "active" : ""}">Mensajes directos</a>`,
+    ...canales.map((c) => `<a href="#/chat?tab=${encodeURIComponent(c.sede + "|" + c.categoria)}" class="chat-tab ${c === activo ? "active" : ""}">${esc(c.sede)} · ${esc(c.categoria.replace(" División", ""))}</a>`),
+    `<a href="#/chat?tab=dm" class="chat-tab ${!activo ? "active" : ""}">Mensajes directos</a>`,
   ].join("");
 
-  const body = activeCategoria
-    ? ChatCategoria(activeCategoria)
+  const body = activo
+    ? ChatCategoria(activo.sede, activo.categoria)
     : (esStaff() ? ChatDMStaff(params) : ChatDMAlumno(alumnos, params));
 
   return `<div class="chat-tabs">${tabs}</div>${body}`;
@@ -2336,7 +2355,7 @@ view.addEventListener("submit", async (e) => {
       Store.setCostosFijos(Number(data.costos) || 0);
       toast("Costos fijos actualizados");
     } else if (action === "mensaje-categoria") {
-      await Store.enviarMensajeCategoria(data.categoria, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);
+      await Store.enviarMensajeCategoria(data.sede, data.categoria, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);
       form.reset();
     } else if (action === "mensaje-directo") {
       await Store.enviarMensajeDirecto(data.alumnoId, data.profeId, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);

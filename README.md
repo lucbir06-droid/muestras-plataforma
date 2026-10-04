@@ -97,6 +97,13 @@ profe ve solo a los suyos y a los "sin asignar").
   nutrición. Solo quien lo tiene activo puede subir hábitos nuevos; el dueño lo
   activa desde la ficha del alumno cuando confirma el cobro. Falta pegar el link
   de la suscripción de Mercado Pago (ver `assets/js/planes.js`).
+- **Chat por sede + división**: los canales de categoría ahora son uno por
+  cada combinación real de sede y división (ej. "Polanco · 1ra", "Metepec ·
+  3ra") en vez de un solo canal compartido entre las dos sedes. El staff ve
+  los 6; un alumno/papá solo ve el (o los) que coinciden con la sede y
+  división de su propio alumno — ninguno hasta que el dueño le asigne
+  división. Si el mismo alumno entrena en las dos sedes (dos fichas
+  distintas ligadas a la misma cuenta), ve los dos canales.
 
 ## Puesta en marcha (una sola vez)
 

@@ -198,6 +198,23 @@ as $$
     );
 $$;
 
+-- ¿La cuenta actual tiene algún alumno propio en esta sede + división?
+-- Un alumno/papá puede tener más de uno (hermanos, o el mismo alumno
+-- entrenando en dos sedes) — si cualquiera coincide, puede ver y escribir
+-- en ese canal de chat. El staff no usa esta función: ve todos los canales.
+create or replace function public.alumno_en_canal(p_sede text, p_categoria text)
+returns boolean
+language sql stable
+security definer set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.alumnos a
+    join public.alumno_usuarios au on au.alumno_id = a.id
+    where au.user_id = auth.uid() and a.sede = p_sede and a.categoria = p_categoria
+  );
+$$;
+
 -- El papá / alumno escribe el código que le dio la academia y queda
 -- ligado a ese alumno. Funciona aunque no tenga el correo confirmado.
 create or replace function public.vincular_alumno(p_codigo text)
@@ -418,6 +435,16 @@ create table if not exists public.mensajes (
     (tipo = 'directo' and profe_id is not null and alumno_id is not null and categoria is null)
   )
 );
+-- el canal de categoría ahora es por sede + división (antes era una sola
+-- división compartida entre Polanco y Metepec) — ver Chat()/ChatCategoria()
+-- en app.js.
+alter table public.mensajes add column if not exists sede text;
+alter table public.mensajes drop constraint if exists mensajes_forma;
+alter table public.mensajes add constraint mensajes_forma check (
+  (tipo = 'categoria' and sede is not null and categoria is not null and profe_id is null and alumno_id is null)
+  or
+  (tipo = 'directo' and sede is null and profe_id is not null and alumno_id is not null and categoria is null)
+);
 
 -- Contacto para plan personalizado y configuración
 create table if not exists public.contactos (
@@ -594,14 +621,18 @@ create policy "evidencias crear" on public.evidencias for insert to authenticate
 create policy "evidencias borrar" on public.evidencias for delete to authenticated
   using (public.es_staff());
 
--- chat: los canales por categoría los ve y escribe cualquiera con sesión;
+-- chat: los canales por categoría los ve y escribe el staff (todos) o un
+-- alumno/papá que tenga un alumno propio en esa sede+división exacta —
 -- los mensajes directos solo los ve el profe del hilo, el dueño, o quien
 -- pueda ver a ese alumno (el papá/alumno ligado, o su profe asignado).
 alter table public.mensajes enable row level security;
 create policy "mensajes categoria ver" on public.mensajes for select to authenticated
-  using (tipo = 'categoria');
+  using (tipo = 'categoria' and (public.es_staff() or public.alumno_en_canal(sede, categoria)));
 create policy "mensajes categoria escribir" on public.mensajes for insert to authenticated
-  with check (tipo = 'categoria' and autor_id = auth.uid());
+  with check (
+    tipo = 'categoria' and autor_id = auth.uid()
+    and (public.es_staff() or public.alumno_en_canal(sede, categoria))
+  );
 create policy "mensajes directo ver" on public.mensajes for select to authenticated
   using (
     tipo = 'directo'
