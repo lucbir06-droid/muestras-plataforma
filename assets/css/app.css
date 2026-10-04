@@ -5,7 +5,7 @@
 body{background:var(--bg);}
 
 svg{width:1em;height:1em;}
-.shell{display:flex;min-height:100vh;}
+.shell{display:flex;min-height:calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));}
 
 /* ---------------- sidebar ---------------- */
 .side{
@@ -56,6 +56,33 @@ svg{width:1em;height:1em;}
   }
   .side-nav a{white-space:nowrap;flex:none;}
   .side-back{display:none;}
+  /* en el teléfono no hay otra forma de salir: el botón queda como ícono */
+  .side-brand span{display:none;}
+  .side-logout{
+    display:flex;flex:none;width:auto !important;margin:0;padding:9px;
+    border:0 !important;border-radius:9px;
+  }
+  .side-logout span{display:none;}
+  .side-logout svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;}
+
+  /* iOS hace zoom (y se queda con zoom) al tocar un campo con letra < 16px */
+  input,textarea,select{font-size:16px;}
+
+  /* las tablas anchas se deslizan dentro de su tarjeta, no estiran la página */
+  table.tbl{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;}
+}
+
+/* ---------------- área segura (muesca / barra de inicio del iPhone) ---------------- */
+html{-webkit-text-size-adjust:100%;}
+body{
+  padding:env(safe-area-inset-top) env(safe-area-inset-right)
+          env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overflow-x:hidden;
+}
+/* tapa la franja de la barra de estado para que el contenido no pase por debajo */
+body::before{
+  content:"";position:fixed;top:0;left:0;right:0;z-index:200;
+  height:env(safe-area-inset-top);background:var(--bg);
 }
 
 /* ---------------- topbar / main ---------------- */
@@ -197,7 +224,7 @@ table.tbl a.rowlink:hover{color:var(--accent-2);}
 
 /* ---------------- toast ---------------- */
 #toast{
-  position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(12px);
+  position:fixed;bottom:calc(22px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(12px);
   background:var(--accent);color:var(--on-accent);font-family:var(--display);font-weight:600;
   font-size:.82rem;padding:12px 20px;border-radius:10px;opacity:0;pointer-events:none;
   transition:opacity .18s ease, transform .18s ease;z-index:100;
@@ -246,3 +273,10 @@ table.tbl a.rowlink:hover{color:var(--accent-2);}
 .chat-msg.mio .chat-msg-hora{text-align:right;}
 .chat-form{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--line);background:var(--surface);}
 .chat-form input[name="contenido"]{flex:1;}
+
+/* ---------------- teléfono: menos margen (va al final para ganarle a las reglas base) ---------------- */
+@media (max-width:900px){
+  .topbar{padding:18px 16px 14px;}
+  .topbar-title{font-size:1.25rem;}
+  .view{padding:18px 16px 60px;}
+}

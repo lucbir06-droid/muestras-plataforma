@@ -2,14 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Panel — Millán Academy</title>
 <link rel="icon" href="../assets/img/favicon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Chakra+Petch:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="../assets/css/brand.css" />
-<link rel="stylesheet" href="../assets/css/app.css" />
+<link rel="stylesheet" href="../assets/css/brand.css?v=28" />
+<link rel="stylesheet" href="../assets/css/app.css?v=29" />
 </head>
 <body>
 
@@ -46,9 +46,9 @@
     <nav id="sidenav" class="side-nav">
       <!-- inyectado por app.js -->
     </nav>
-    <button id="logoutBtn" class="side-back" style="background:none;border:0;width:100%;text-align:left;cursor:pointer;font-family:inherit;">
-      <svg viewBox="0 0 24 24"><use href="#i-back"/></svg>
-      Cerrar sesión
+    <button id="logoutBtn" class="side-back side-logout" aria-label="Cerrar sesión" style="background:none;border:0;width:100%;text-align:left;cursor:pointer;font-family:inherit;">
+      <svg viewBox="0 0 24 24"><use href="#i-exit"/></svg>
+      <span>Cerrar sesión</span>
     </button>
     <a class="side-back" href="../" style="border-top:0;padding-top:0;">
       <svg viewBox="0 0 24 24"><use href="#i-back"/></svg>

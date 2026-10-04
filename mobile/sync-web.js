@@ -37,6 +37,8 @@ copiarCarpeta(path.join(root, "assets"), path.join(wwwDir, "assets"));
 // 2) app/index.html -> www/index.html, con las rutas ajustadas
 let html = fs.readFileSync(path.join(root, "app", "index.html"), "utf8");
 html = html.replaceAll("../assets/", "./assets/");
+// en la app no existe el sitio público ("../"): el emblema lleva al inicio del panel
+html = html.replaceAll('href="../"', 'href="#/"');
 fs.writeFileSync(path.join(wwwDir, "index.html"), html);
 
 console.log("✔ mobile/www listo (copiado de app/ + assets/)");
