@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=35";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=35";
-import { sb } from "./supabase-client.js?v=35";
+import { Store, toYMD } from "./store.js?v=36";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=36";
+import { sb } from "./supabase-client.js?v=36";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=35";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=35" en los imports de arriba son para que el navegador de
+   Los "?v=36" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=35" en el proyecto (app/index.html, store.js e
+   aparezca "?v=36" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1008,12 +1008,33 @@ function blobABase64(blob) {
 
 /* ---------------- check-in / check-out ---------------- */
 
+// Campo de foto: un recuadro grande que al tocarlo abre la cámara del
+// teléfono (capture) y muestra la foto tomada. El <input> real queda
+// invisible encima de todo el recuadro, así el toque le llega directo (en
+// iPhone es lo más confiable) y "required" sigue funcionando.
+function campoFoto({ etiqueta, requerida = false, ayuda = "Toca para abrir la cámara" }) {
+  return `
+    <div class="field">
+      <label>${etiqueta}${requerida ? "" : " (opcional)"}</label>
+      <div class="foto-campo">
+        <img class="foto-vista" alt="" hidden />
+        <div class="foto-vacia">
+          ${icon("i-camera")}
+          <b>Tomar foto</b>
+          <span>${ayuda}</span>
+        </div>
+        <div class="foto-cambiar" hidden>${icon("i-refresh")} Volver a tomar</div>
+        <input name="foto" type="file" accept="image/*" capture="environment" data-foto ${requerida ? "required" : ""} aria-label="${etiqueta}" />
+      </div>
+    </div>`;
+}
+
 function Checkin() {
   const checkins = Store.checkins();
   return `
     <div class="block">
       <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
-        Cuando llegas a la cancha, sácate una foto aquí mismo desde el celular.
+        Cuando llegas a la cancha, toca el recuadro y tómate una foto con la cámara del teléfono.
         Queda guardada y le llega un email a Millán al instante. Al terminar, haz el
         <a href="#/checkout" style="color:var(--accent-2)">check-out</a> con el reporte de tus alumnos.
       </p>
@@ -1022,10 +1043,7 @@ function Checkin() {
         <div class="field"><label>Sede</label>
           <select name="sede">${Store.SEDES.map((s) => `<option>${s}</option>`).join("")}</select>
         </div>
-        <div class="field">
-          <label>Foto de llegada</label>
-          <input name="foto" type="file" accept="image/*" capture="environment" required />
-        </div>
+        ${campoFoto({ etiqueta: "Foto de llegada", requerida: true })}
         <button class="btn btn-primary btn-sm" type="submit">${icon("i-camera")} Enviar check-in</button>
       </form>
     </div>
@@ -1141,6 +1159,7 @@ function Checkout() {
           : `<div class="empty" style="margin:14px 0;">No tienes alumnos en la sede ${esc(sede)}.</div>`}
         <div class="field"><label>Resumen general de la sesión (opcional)</label>
           <textarea name="resumen" placeholder="Cómo estuvo la sesión en general, incidencias, pendientes…"></textarea></div>
+        ${campoFoto({ etiqueta: "Foto de salida", ayuda: "Toca para tomar la foto del cierre del entrenamiento" })}
         <button class="btn btn-primary btn-sm" type="submit" ${alumnos.length ? "" : "disabled"}>${icon("i-exit")} Hacer check-out y enviar reporte</button>
       </form>
     </div>
@@ -1161,6 +1180,7 @@ async function handleCheckout(form) {
     a, presente: form.elements["presente_" + a.id].checked, reporte: form.elements["reporte_" + a.id].value.trim(),
   }));
   const general = form.elements.resumen.value.trim();
+  const archivoFoto = form.elements.foto?.files[0] || null;
   const presentes = marcas.filter((m) => m.presente);
   const ausentes = marcas.filter((m) => !m.presente);
   const conReporte = presentes.filter((m) => m.reporte);
@@ -1174,8 +1194,9 @@ async function handleCheckout(form) {
   if (general) lineas.push(`Resumen: ${general}`);
   const resumen = lineas.join("\n");
 
-  let registro;
+  let registro, fotoBlob = null;
   try {
+    if (archivoFoto) fotoBlob = await resizeImage(archivoFoto, 1400, 0.82);
     await Store.guardarAsistencias(fecha, sede, marcas.map((m) => ({ alumnoId: m.a.id, presente: m.presente })), perfil.nombre);
     for (const m of conReporte) {
       await Store.addBitacora({
@@ -1183,7 +1204,7 @@ async function handleCheckout(form) {
         fecha: new Date(`${fecha}T12:00:00`).toISOString(),
       });
     }
-    registro = await Store.addCheckin({ nombre: perfil.nombre, sede, tipo: "salida", resumen, estado: "enviando" });
+    registro = await Store.addCheckin({ nombre: perfil.nombre, sede, tipo: "salida", resumen, fotoBlob, estado: "enviando" });
     toast("Check-out registrado — reportes enviados");
   } catch (err) {
     toast(errMsg(err));
@@ -1193,7 +1214,11 @@ async function handleCheckout(form) {
   render();
 
   try {
-    await notificarEmail({ subject: `Check-out — ${perfil.nombre} en ${sede}`, message: resumen });
+    await notificarEmail({
+      subject: `Check-out — ${perfil.nombre} en ${sede}`,
+      message: resumen + (registro.fotoUrl ? `\n\nFoto: ${registro.fotoUrl}` : ""),
+      fotoBlob: fotoBlob || undefined,
+    });
     await Store.updateCheckin(registro.id, { estado: "enviado" });
     toast("Millán fue notificado por email");
   } catch (err) {
@@ -1282,7 +1307,7 @@ function Evidencias() {
           <select name="tipo">${TIPOS_EVIDENCIA.map((t) => `<option>${t}</option>`).join("")}</select>
         </div>
         <div class="field"><label>Comentario</label><textarea name="comentario" placeholder="Ej. Entrenamiento de fuerza, 45 min"></textarea></div>
-        <div class="field"><label>Foto</label><input name="foto" type="file" accept="image/*" capture="environment" required /></div>
+        ${campoFoto({ etiqueta: "Foto", requerida: true })}
         <button class="btn btn-primary btn-sm" type="submit">${icon("i-task")} Subir hábito</button>
       </form>` : `<div class="empty">${esDueno() ? "Todavía no hay alumnos con Hábitos Premium activo." : "No tienes alumnos con Hábitos Premium activo."}</div>`}
     </div>
@@ -2548,6 +2573,20 @@ function Chat(fullPath) {
 
 // cambiar sede / fecha / categoría en asistencia y check-out recarga la lista de alumnos
 view.addEventListener("change", (e) => {
+  // tomó (o eligió) una foto: mostrarla en el recuadro
+  const foto = e.target.closest("input[data-foto]");
+  if (foto) {
+    const caja = foto.closest(".foto-campo");
+    const vista = caja.querySelector(".foto-vista");
+    const archivo = foto.files[0];
+    if (vista.src) URL.revokeObjectURL(vista.src);
+    if (archivo) vista.src = URL.createObjectURL(archivo);
+    vista.hidden = !archivo;
+    caja.querySelector(".foto-vacia").hidden = !!archivo;
+    caja.querySelector(".foto-cambiar").hidden = !archivo;
+    caja.classList.toggle("con-foto", !!archivo);
+    return;
+  }
   const el = e.target.closest("[data-ctx]");
   if (!el) return;
   const form = el.closest("form");
