@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=32";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=32";
-import { sb } from "./supabase-client.js?v=32";
+import { Store, toYMD } from "./store.js?v=34";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=34";
+import { sb } from "./supabase-client.js?v=34";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=32";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=32" en los imports de arriba son para que el navegador de
+   Los "?v=34" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=32" en el proyecto (app/index.html, store.js e
+   aparezca "?v=34" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -393,7 +393,9 @@ function SignupView(errorMsg) {
         <div class="field"><label>Contraseña</label><input name="password" type="password" required minlength="6" autocomplete="new-password" /></div>
         <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Crear cuenta</button>
         <p style="font-size:.74rem;color:var(--muted);margin-top:12px;text-align:center;">
-          Al crear tu cuenta aceptas el <a href="https://millanacademy.com/privacidad/" target="_blank" rel="noopener" style="color:var(--accent-2);">aviso de privacidad</a>.
+          Al crear tu cuenta aceptas el <a href="https://millanacademy.com/privacidad/" target="_blank" rel="noopener" style="color:var(--accent-2);">aviso de privacidad</a>
+          y las <a href="https://millanacademy.com/privacidad/#normas" target="_blank" rel="noopener" style="color:var(--accent-2);">normas de uso</a>:
+          no se tolera contenido ofensivo ni abuso hacia otros usuarios.
         </p>
       </form>`);
 }
@@ -2234,6 +2236,18 @@ function MiCuenta() {
       </div>
     </div>
 
+    ${Store.bloqueados().length ? `
+    <div class="block" style="max-width:520px;">
+      <div class="block-head"><h3>Usuarios bloqueados</h3></div>
+      <div class="list">
+        ${Store.bloqueados().map((b) => `
+        <div class="row-card">
+          <div class="grow"><div class="row-title">${esc(b.nombre || "Usuario")}</div><div class="row-sub">No ves sus mensajes en el chat.</div></div>
+          <button class="btn btn-ghost btn-sm" type="button" data-action="desbloquear-usuario" data-id="${b.id}">Desbloquear</button>
+        </div>`).join("")}
+      </div>
+    </div>` : ""}
+
     <div class="block" style="max-width:520px;">
       <div class="block-head"><h3>Eliminar mi cuenta</h3></div>
       <form class="card" data-action="eliminar-cuenta" style="border-color:var(--crit);">
@@ -2263,6 +2277,38 @@ function ChatMensajeBubble(m) {
       <div class="chat-msg-meta">${esc(m.autorNombre)}${mio ? "" : etiquetaRol}</div>
       <div class="chat-msg-bubble">${esc(m.contenido)}</div>
       <div class="chat-msg-hora">${fmtHora(m.fecha)}</div>
+      ${mio && !esDueno() ? "" : `
+      <div class="chat-msg-acciones">
+        ${mio ? "" : `<button type="button" data-action="reportar-mensaje" data-id="${m.id}">Reportar</button>
+        <button type="button" data-action="bloquear-usuario" data-id="${m.autorId}" data-nombre="${esc(m.autorNombre)}">Bloquear</button>`}
+        ${esDueno() ? `<button type="button" data-action="borrar-mensaje" data-id="${m.id}">Eliminar</button>` : ""}
+      </div>`}
+    </div>`;
+}
+
+// solo el dueño: mensajes que alguien reportó y siguen sin revisar
+function ReportesPendientes() {
+  const reportes = esDueno() ? Store.reportesPendientes() : [];
+  if (!reportes.length) return "";
+  return `
+    <div class="block">
+      <div class="block-head"><h3>Mensajes reportados</h3></div>
+      <div class="list">
+        ${reportes.map((r) => `
+        <div class="row-card" style="border-color:var(--crit);">
+          <div class="grow">
+            <div class="row-title">${esc(r.autorNombre || "Alguien")}: “${esc(r.contenido || "")}”</div>
+            <div class="row-sub">Lo reportó ${esc(r.reportadoPor || "un usuario")}${r.motivo ? ` — ${esc(r.motivo)}` : ""} · ${fmtHora(r.fecha)}</div>
+          </div>
+          <div class="row-actions">
+            ${r.mensajeId ? `<button class="btn btn-sm" type="button" style="background:var(--crit);color:#fff;" data-action="borrar-mensaje" data-id="${r.mensajeId}" data-reporte="${r.id}">Eliminar mensaje</button>` : ""}
+            <button class="btn btn-ghost btn-sm" type="button" data-action="cerrar-reporte" data-id="${r.id}">Marcar revisado</button>
+          </div>
+        </div>`).join("")}
+      </div>
+      <p style="font-size:.76rem;color:var(--muted);margin-top:10px;">
+        Para sacar a alguien de la academia en la app, da de baja su acceso desde Dueños o Alumnos.
+      </p>
     </div>`;
 }
 
@@ -2429,7 +2475,11 @@ function Chat(fullPath) {
     ? ChatCategoria(activo.sede, activo.categoria)
     : (esStaff() ? ChatDMStaff(params) : ChatDMAlumno(alumnos, params));
 
-  return `<div class="chat-tabs">${tabs}</div>${body}`;
+  return `${ReportesPendientes()}<div class="chat-tabs">${tabs}</div>${body}
+    <p style="font-size:.74rem;color:var(--muted);margin-top:12px;">
+      No se permite contenido ofensivo ni abuso. Puedes reportar un mensaje o bloquear a quien lo escribió;
+      la academia revisa los reportes en menos de 24 horas.
+    </p>`;
 }
 
 /* ---------------- acciones (delegadas) ---------------- */
@@ -2584,6 +2634,51 @@ view.addEventListener("submit", async (e) => {
 view.addEventListener("click", async (e) => {
   try {
     if (e.target.closest("[data-action='cerrar-sesion']")) return void cerrarSesion();
+
+    /* ---- moderación del chat ---- */
+    const reportarBtn = e.target.closest("[data-action='reportar-mensaje']");
+    if (reportarBtn) {
+      const m = Store.mensajes().find((x) => x.id === reportarBtn.dataset.id);
+      if (!m) return;
+      const motivo = prompt(`¿Por qué reportas el mensaje de ${m.autorNombre}? (opcional)`);
+      if (motivo === null) return; // canceló
+      await Store.reportarMensaje(m, motivo.trim(), perfil.nombre);
+      notificarEmail({
+        subject: "Mensaje reportado en el chat — Millán Academy",
+        message: `${perfil.nombre} reportó un mensaje de ${m.autorNombre}:\n\n“${m.contenido}”\n\n` +
+          `Motivo: ${motivo.trim() || "(sin motivo)"}\n\nRevísalo en la app: Chat → Mensajes reportados.`,
+      }).catch((err) => console.warn("No se pudo avisar del reporte por email:", err));
+      toast("Reporte enviado. La academia lo revisa en menos de 24 horas.");
+      return;
+    }
+    const bloquearBtn = e.target.closest("[data-action='bloquear-usuario']");
+    if (bloquearBtn) {
+      const nombre = bloquearBtn.dataset.nombre;
+      if (!confirm(`¿Bloquear a ${nombre}? Dejarás de ver sus mensajes. Lo puedes deshacer en Mi cuenta.`)) return;
+      await Store.bloquear(bloquearBtn.dataset.id, nombre);
+      toast(`Bloqueaste a ${nombre}`);
+      return void render();
+    }
+    const desbloquearBtn = e.target.closest("[data-action='desbloquear-usuario']");
+    if (desbloquearBtn) {
+      await Store.desbloquear(desbloquearBtn.dataset.id);
+      toast("Usuario desbloqueado");
+      return void render();
+    }
+    const borrarMsgBtn = e.target.closest("[data-action='borrar-mensaje']");
+    if (borrarMsgBtn) {
+      if (!confirm("¿Eliminar este mensaje para todos? No se puede deshacer.")) return;
+      await Store.borrarMensaje(borrarMsgBtn.dataset.id);
+      if (borrarMsgBtn.dataset.reporte) await Store.cerrarReporte(borrarMsgBtn.dataset.reporte);
+      toast("Mensaje eliminado");
+      return void render();
+    }
+    const cerrarReporteBtn = e.target.closest("[data-action='cerrar-reporte']");
+    if (cerrarReporteBtn) {
+      await Store.cerrarReporte(cerrarReporteBtn.dataset.id);
+      toast("Reporte marcado como revisado");
+      return void render();
+    }
 
     const solicitudBtn = e.target.closest("[data-action='solicitud-estado']");
     if (solicitudBtn) {

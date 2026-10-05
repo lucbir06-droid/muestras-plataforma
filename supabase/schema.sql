@@ -727,3 +727,52 @@ as $$
 $$;
 revoke execute on function public.quitar_dispositivo(text) from public, anon;
 grant execute on function public.quitar_dispositivo(text) to authenticated;
+
+-- ---------------------------------------------------------------
+-- MODERACIÓN DEL CHAT — reportar mensajes y bloquear usuarios
+-- ---------------------------------------------------------------
+-- Apple exige que cualquier app donde los usuarios se escriben entre sí
+-- deje reportar contenido y bloquear a quien abusa, y que la academia
+-- pueda borrar el mensaje y sacar a la persona.
+
+-- un reporte guarda copia del mensaje (por si el autor o el dueño lo borra
+-- antes de que alguien lo revise)
+create table if not exists public.reportes_mensajes (
+  id uuid primary key default gen_random_uuid(),
+  mensaje_id uuid references public.mensajes(id) on delete set null,
+  autor_id uuid,
+  autor_nombre text,
+  contenido text,
+  reportado_por uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  reportado_por_nombre text,
+  motivo text,
+  estado text not null default 'pendiente',
+  creado_en timestamptz not null default now()
+);
+alter table public.reportes_mensajes enable row level security;
+-- cualquiera con sesión puede reportar; solo el dueño los ve y los cierra
+create policy "reportes crear" on public.reportes_mensajes for insert to authenticated
+  with check (reportado_por = auth.uid());
+create policy "reportes dueno ver" on public.reportes_mensajes for select to authenticated
+  using (public.es_dueno());
+create policy "reportes dueno editar" on public.reportes_mensajes for update to authenticated
+  using (public.es_dueno()) with check (public.es_dueno());
+create policy "reportes dueno borrar" on public.reportes_mensajes for delete to authenticated
+  using (public.es_dueno());
+
+-- a quién bloqueó cada cuenta: deja de ver sus mensajes (cada quien
+-- maneja solo su propia lista)
+create table if not exists public.bloqueos (
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  bloqueado_id uuid not null,
+  bloqueado_nombre text,
+  creado_en timestamptz not null default now(),
+  primary key (user_id, bloqueado_id)
+);
+alter table public.bloqueos enable row level security;
+create policy "bloqueos propios" on public.bloqueos for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- borrar mensajes: el dueño cualquiera (moderación), cada quien los suyos
+create policy "mensajes borrar" on public.mensajes for delete to authenticated
+  using (public.es_dueno() or autor_id = auth.uid());

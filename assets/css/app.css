@@ -294,6 +294,13 @@ table.tbl a.rowlink:hover{color:var(--accent-2);}
 .chat-msg.mio .chat-msg-bubble{background:var(--accent-soft);border-color:var(--accent-line);}
 .chat-msg-hora{font-size:.68rem;color:var(--muted);margin-top:3px;}
 .chat-msg.mio .chat-msg-hora{text-align:right;}
+.chat-msg-acciones{display:flex;gap:12px;margin-top:2px;}
+.chat-msg.mio .chat-msg-acciones{justify-content:flex-end;}
+.chat-msg-acciones button{
+  background:none;border:0;padding:4px 0;cursor:pointer;
+  font-family:var(--body);font-size:.7rem;color:var(--muted);text-decoration:underline;
+}
+.chat-msg-acciones button:hover{color:var(--crit);}
 .chat-form{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--line);background:var(--surface);}
 .chat-form input[name="contenido"]{flex:1;}
 

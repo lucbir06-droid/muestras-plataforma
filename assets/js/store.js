@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=32";
+import { sb } from "./supabase-client.js?v=34";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -74,6 +74,7 @@ function proximaFecha(diaNombre, semanasAdelante) {
 const C = {
   alumnos: [], bitacora: [], reservas: [], pagos: [], checkins: [], asistencias: [],
   evidencias: [], solicitudes: [], inscripciones: [], objetivos: [], perfiles: [], mensajes: [],
+  bloqueos: [], reportes: [],
 };
 
 const urlFoto = (bucket, path) => (path ? sb.storage.from(bucket).getPublicUrl(path).data.publicUrl : null);
@@ -137,6 +138,12 @@ const TABLAS = {
   objetivos:     { tabla: "objetivos_categoria", orden: ["fecha", false],  map: mapObjetivo },
   perfiles:      { tabla: "perfiles",            orden: ["creado_en", true], map: mapPerfil },
   mensajes:      { tabla: "mensajes",            orden: ["creado_en", true], map: mapMensaje },
+  bloqueos:      { tabla: "bloqueos",            orden: ["creado_en", false], map: (r) => ({ id: r.bloqueado_id, nombre: r.bloqueado_nombre }) },
+  // solo le llegan al dueño (los demás reciben la lista vacía por RLS)
+  reportes:      { tabla: "reportes_mensajes",   orden: ["creado_en", false], map: (r) => ({
+    id: r.id, mensajeId: r.mensaje_id, autorId: r.autor_id, autorNombre: r.autor_nombre, contenido: r.contenido,
+    reportadoPor: r.reportado_por_nombre, motivo: r.motivo, estado: r.estado, fecha: r.creado_en,
+  }) },
 };
 
 async function cargar(clave) {
@@ -450,13 +457,18 @@ export const Store = {
   },
 
   /* ---- chat (canales por sede+categoría + mensajes directos con un profe) ---- */
-  mensajes() { return C.mensajes; },
+  // sin los mensajes de quien esta cuenta bloqueó
+  mensajes() {
+    if (!C.bloqueos.length) return C.mensajes;
+    const bloqueados = new Set(C.bloqueos.map((b) => b.id));
+    return C.mensajes.filter((m) => !bloqueados.has(m.autorId));
+  },
   mensajesCategoria(sede, categoria) {
-    return C.mensajes.filter((m) => m.tipo === "categoria" && m.sede === sede && m.categoria === categoria)
+    return this.mensajes().filter((m) => m.tipo === "categoria" && m.sede === sede && m.categoria === categoria)
       .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   },
   mensajesDirectos(alumnoId, profeId) {
-    return C.mensajes.filter((m) => m.tipo === "directo" && m.alumnoId === alumnoId && m.profeId === profeId)
+    return this.mensajes().filter((m) => m.tipo === "directo" && m.alumnoId === alumnoId && m.profeId === profeId)
       .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   },
   async enviarMensajeCategoria(sede, categoria, contenido, autorId, autorNombre, autorRol) {
@@ -465,6 +477,38 @@ export const Store = {
   },
   async enviarMensajeDirecto(alumnoId, profeId, contenido, autorId, autorNombre, autorRol) {
     await insertar("mensajes", { tipo: "directo", alumno_id: alumnoId, profe_id: profeId, contenido, autor_id: autorId, autor_nombre: autorNombre, autor_rol: autorRol });
+    await cargar("mensajes");
+  },
+
+  /* ---- moderación del chat: reportar, bloquear, borrar ---- */
+  bloqueados() { return C.bloqueos; },
+  async bloquear(userId, nombre) {
+    const { error } = await sb.from("bloqueos").upsert({ bloqueado_id: userId, bloqueado_nombre: nombre });
+    if (error) throw error;
+    await cargar("bloqueos");
+  },
+  async desbloquear(userId) {
+    const { error } = await sb.from("bloqueos").delete().eq("bloqueado_id", userId);
+    if (error) throw error;
+    await cargar("bloqueos");
+  },
+  async reportarMensaje(m, motivo, reportadoPorNombre) {
+    // sin .select(): quien reporta no tiene permiso de leer la tabla de reportes
+    const { error } = await sb.from("reportes_mensajes").insert({
+      mensaje_id: m.id, autor_id: m.autorId, autor_nombre: m.autorNombre, contenido: m.contenido,
+      reportado_por_nombre: reportadoPorNombre, motivo,
+    });
+    if (error) throw error;
+  },
+  reportesPendientes() { return C.reportes.filter((r) => r.estado === "pendiente"); },
+  async cerrarReporte(id) {
+    const { error } = await sb.from("reportes_mensajes").update({ estado: "revisado" }).eq("id", id);
+    if (error) throw error;
+    await cargar("reportes");
+  },
+  async borrarMensaje(id) {
+    const { error } = await sb.from("mensajes").delete().eq("id", id);
+    if (error) throw error;
     await cargar("mensajes");
   },
 
