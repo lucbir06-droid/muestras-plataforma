@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=34";
+import { sb } from "./supabase-client.js?v=35";
 
 const DB_KEY = "millan_academy_v3";
 

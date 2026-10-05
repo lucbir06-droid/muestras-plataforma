@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=34";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=34";
-import { sb } from "./supabase-client.js?v=34";
+import { Store, toYMD } from "./store.js?v=35";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=35";
+import { sb } from "./supabase-client.js?v=35";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=34";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=34" en los imports de arriba son para que el navegador de
+   Los "?v=35" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=34" en el proyecto (app/index.html, store.js e
+   aparezca "?v=35" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -57,11 +57,19 @@ const NAV = [
   { path: "/inscribirse", label: "Inscripciones", labelAlumno: "Inscribirme", icon: "i-check", roles: ["dueño", "alumno"], countKey: "inscripcionesPendientes" },
   { path: "/profes", label: "Objetivos de profes", icon: "i-target", roles: TODOS },
   { path: "/reportes", label: "Reportes", icon: "i-chart", roles: TODOS },
-  { path: "/pagos", label: "Pagos", labelAlumno: "Mi suscripción", icon: "i-card", roles: ["dueño", "alumno"], countKey: "pagosPendientes" },
+  { path: "/pagos", label: "Pagos", labelAlumno: "Mi suscripción", corto: "Pagos", icon: "i-card", roles: ["dueño", "alumno"], countKey: "pagosPendientes" },
   { path: "/duenos", label: "Dueños", icon: "i-shield", roles: ["dueño"], countKey: "profesPendientes" },
   { path: "/chat", label: "Chat", icon: "i-chat", roles: TODOS },
   { path: "/cuenta", label: "Mi cuenta", icon: "i-shield", roles: TODOS },
 ];
+
+// En el teléfono el menú es una barra de pestañas abajo: las 4 secciones
+// que más usa cada tipo de cuenta + "Más" (el resto, en una hoja).
+const TABS_POR_ROL = {
+  "alumno": ["/", "/agenda", "/chat", "/pagos"],
+  "profe": ["/", "/checkin", "/asistencia", "/chat"],
+  "dueño": ["/", "/alumnos", "/pagos", "/chat"],
+};
 
 function itemDeRuta(path) {
   return NAV.find((n) => n.path === path || (n.path === "/inscribirse" && path.startsWith("/inscribirse")));
@@ -206,6 +214,7 @@ function currentFullPath() {
   return location.hash.slice(1) || "/";
 }
 
+let ultimaRuta = null;
 function render() {
   const path = currentPath();
   renderNav(path);
@@ -273,7 +282,15 @@ function render() {
 
   pageTitle.textContent = title;
   view.innerHTML = html;
-  window.scrollTo(0, 0);
+  // la entrada animada y el volver arriba solo al cambiar de sección: el
+  // chat se redibuja cada pocos segundos y no debe parpadear ni saltar
+  if (path !== ultimaRuta) {
+    ultimaRuta = path;
+    window.scrollTo(0, 0);
+    view.classList.remove("entra");
+    void view.offsetWidth; // reinicia la animación
+    view.classList.add("entra");
+  }
 
   if (path === "/chat") {
     iniciarPollChat();
@@ -319,6 +336,43 @@ function renderNav(path) {
       const label = esAlumno() && item.labelAlumno ? item.labelAlumno : item.label;
       return `<a href="#${item.path}" class="${on ? "on" : ""}">${icon(item.icon)}<span>${label}</span>${count ? `<span class="badge-count">${count}</span>` : ""}</a>`;
     }).join("");
+
+  // teléfono: barra de pestañas + hoja "Más"
+  const activa = (item) => path === item.path || path.startsWith(item.path + "/") || (item.path === "/inscribirse" && path.startsWith("/inscribirse"));
+  const etiqueta = (item, corta) => (corta && item.corto) || (esAlumno() && item.labelAlumno) || item.label;
+  const mias = NAV.filter((item) => item.roles.includes(rol()));
+  const principales = (TABS_POR_ROL[rol()] || TABS_POR_ROL.alumno).map((p) => mias.find((i) => i.path === p)).filter(Boolean);
+  const resto = mias.filter((i) => !principales.includes(i));
+  const enResto = resto.some(activa);
+  const pendientesResto = resto.reduce((s, i) => s + (i.countKey ? counts[i.countKey] : 0), 0);
+  tabbar.innerHTML = principales.map((item) => {
+    const count = item.countKey ? counts[item.countKey] : 0;
+    return `<a href="#${item.path}" class="${activa(item) ? "on" : ""}">${icon(item.icon)}<span>${etiqueta(item, true)}</span>${count ? `<i class="punto">${count}</i>` : ""}</a>`;
+  }).join("") + `<button type="button" id="tabMas" class="${enResto ? "on" : ""}" aria-haspopup="dialog">${icon("i-more")}<span>Más</span>${pendientesResto ? `<i class="punto">${pendientesResto}</i>` : ""}</button>`;
+  navSheetItems.innerHTML = resto.map((item) => {
+    const count = item.countKey ? counts[item.countKey] : 0;
+    return `<a href="#${item.path}" class="${activa(item) ? "on" : ""}">${icon(item.icon)}<span>${etiqueta(item, false)}</span>${count ? `<i class="punto">${count}</i>` : ""}</a>`;
+  }).join("");
+}
+
+const tabbar = document.getElementById("tabbar");
+const navSheet = document.getElementById("navSheet");
+const navSheetItems = document.getElementById("navSheetItems");
+function abrirSheet(abierta) {
+  navSheet.hidden = !abierta;
+  document.body.classList.toggle("sheet-abierta", abierta);
+}
+tabbar.addEventListener("click", (e) => {
+  if (e.target.closest("#tabMas")) abrirSheet(navSheet.hidden);
+});
+navSheet.addEventListener("click", (e) => {
+  if (e.target.closest("[data-cerrar-sheet]") || e.target.closest("a")) abrirSheet(false);
+});
+document.getElementById("logoutBtnSheet").addEventListener("click", () => { abrirSheet(false); cerrarSesion(); });
+// sin sesión (login/registro) no hay menú
+function ocultarNav() {
+  tabbar.innerHTML = "";
+  abrirSheet(false);
 }
 
 /* ---------------- login / registro / sesión ---------------- */
@@ -339,8 +393,16 @@ async function cargarPerfil() {
 }
 
 function AuthShell(mode, inner) {
-  return `<div style="display:flex;align-items:center;justify-content:center;min-height:78vh;padding:20px 16px;box-sizing:border-box;">
-    <div style="max-width:400px;width:100%;">
+  // el logo se toma del que ya está en el menú: así la ruta sirve igual en
+  // la web ("../assets") y dentro de la app ("./assets")
+  const logo = document.querySelector(".side-brand img")?.src || "";
+  return `<div class="auth">
+    <div class="auth-caja">
+      <div class="auth-marca">
+        <img src="${logo}" alt="" />
+        <h2>Millán Academy</h2>
+        <p>Academia de porteros</p>
+      </div>
       <div class="card">
         <div style="display:flex;gap:6px;background:var(--surface-2);padding:4px;border-radius:10px;margin-bottom:20px;">
           <button type="button" id="tabLogin" class="btn ${mode === "login" ? "btn-primary" : "btn-ghost"} btn-sm" style="flex:1;border:0;">Iniciar sesión</button>
@@ -354,7 +416,6 @@ function AuthShell(mode, inner) {
 
 function LoginView(errorMsg, infoMsg) {
   return AuthShell("login", `
-      <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Millán Academy</p>
       ${infoMsg ? `<div class="mp-note" style="margin-bottom:16px;">${esc(infoMsg)}</div>` : ""}
       ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
       <form id="authForm">
@@ -366,7 +427,6 @@ function LoginView(errorMsg, infoMsg) {
 
 function SignupView(errorMsg) {
   return AuthShell("signup", `
-      <p style="font-size:.82rem;color:var(--muted);margin-bottom:18px;">Millán Academy</p>
       ${errorMsg ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:16px;">${esc(errorMsg)}</div>` : ""}
       <form id="authForm">
         <div class="field"><label>Nombre completo</label><input name="nombre" required /></div>
@@ -486,6 +546,7 @@ async function route() {
     perfil = null;
     Store.clear();
     side.style.display = "none";
+    ocultarNav();
     if (eyebrow) eyebrow.textContent = "Millán Academy";
     if (path === "/registro") showSignup(); else showLogin();
     return;
@@ -509,6 +570,7 @@ async function route() {
     await sb.auth.signOut();
     session = null; perfil = null; Store.clear();
     side.style.display = "none";
+    ocultarNav();
     if (eyebrow) eyebrow.textContent = "Millán Academy";
     const aviso = `Cerramos la sesión de ${nombreAnterior} para que puedas ${path === "/registro" ? "crear una cuenta nueva" : "iniciar con otra cuenta"}.`;
     if (path === "/registro") showSignup(); else showLogin(null, aviso);

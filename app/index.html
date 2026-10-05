@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Chakra+Petch:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="../assets/css/brand.css?v=34" />
-<link rel="stylesheet" href="../assets/css/app.css?v=34" />
+<link rel="stylesheet" href="../assets/css/brand.css?v=35" />
+<link rel="stylesheet" href="../assets/css/app.css?v=35" />
 </head>
 <body>
 
@@ -33,6 +33,7 @@
     <g id="i-chat"><path d="M4 5.5h16v10.4H9.5L5 20V15.9H4Z"/><path d="M8 9.4h8M8 12.4h5"/></g>
     <g id="i-task"><rect x="4" y="3.5" width="16" height="17" rx="2.4"/><path d="M8 12.3l2.6 2.6L16.5 9" fill="none"/></g>
     <g id="i-list"><rect x="4.5" y="4" width="15" height="16.5" rx="2.2"/><path d="M8 9h8M8 12.5h8M8 16h5"/></g>
+    <g id="i-more"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></g>
     <g id="i-exit"><path d="M14 4.5H7.2A1.7 1.7 0 0 0 5.5 6.2v11.6a1.7 1.7 0 0 0 1.7 1.7H14"/><path d="M10.5 12h9M16.5 8.5 20 12l-3.5 3.5" fill="none"/></g>
   </defs>
 </svg>
@@ -67,7 +68,20 @@
   </div>
 </div>
 
+<!-- teléfono: barra de pestañas abajo + hoja "Más" con el resto del menú -->
+<nav id="tabbar" class="tabbar" aria-label="Secciones"></nav>
+<div id="navSheet" class="sheet" hidden>
+  <div class="sheet-fondo" data-cerrar-sheet></div>
+  <div class="sheet-panel" role="dialog" aria-label="Más secciones">
+    <div class="sheet-asa"></div>
+    <div id="navSheetItems" class="sheet-grid"></div>
+    <button type="button" class="sheet-salir" id="logoutBtnSheet">
+      <svg viewBox="0 0 24 24"><use href="#i-exit"/></svg> Cerrar sesión
+    </button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script type="module" src="../assets/js/app.js?v=34"></script>
+<script type="module" src="../assets/js/app.js?v=35"></script>
 </body>
 </html>
