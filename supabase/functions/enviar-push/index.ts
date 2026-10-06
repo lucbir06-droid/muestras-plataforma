@@ -11,6 +11,8 @@
 //    role key como Authorization:
 //      { tipo: "alumno", alumnoId, titulo, cuerpo, ruta }
 //    Le llega a las cuentas ligadas a ese alumno (papá/mamá/el alumno).
+//      { tipo: "duenos", titulo, cuerpo, ruta }
+//    Le llega a todos los dueños (ej. cuando entra un pago).
 //
 // Puesta en marcha (una sola vez):
 // 1. developer.apple.com → Certificates, IDs & Profiles → Keys → "+" →
@@ -155,9 +157,20 @@ Deno.serve(async (req) => {
 
     // llamada interna (otra Edge Function, con la service role key)
     if (bearer === SERVICE_ROLE_KEY) {
-      if (body.tipo !== "alumno" || !body.alumnoId || !body.titulo || !body.cuerpo) throw new Error("Falta alumnoId, titulo o cuerpo");
-      const { data: vinculos } = await admin.from("alumno_usuarios").select("user_id").eq("alumno_id", body.alumnoId);
-      const r = await enviarA((vinculos || []).map((v) => v.user_id), { titulo: body.titulo, cuerpo: body.cuerpo, ruta: body.ruta });
+      if (!body.titulo || !body.cuerpo) throw new Error("Falta titulo o cuerpo");
+      let userIds: string[] = [];
+      if (body.tipo === "alumno" && body.alumnoId) {
+        // a las cuentas ligadas a ese alumno (papá / mamá / el alumno)
+        const { data: vinculos } = await admin.from("alumno_usuarios").select("user_id").eq("alumno_id", body.alumnoId);
+        userIds = (vinculos || []).map((v) => v.user_id);
+      } else if (body.tipo === "duenos") {
+        // a todos los dueños (ej. "llegó un pago")
+        const { data: duenos } = await admin.from("perfiles").select("id").eq("rol", "dueño");
+        userIds = (duenos || []).map((p) => p.id);
+      } else {
+        throw new Error("Tipo de aviso no válido");
+      }
+      const r = await enviarA(userIds, { titulo: body.titulo, cuerpo: body.cuerpo, ruta: body.ruta });
       return responder({ success: true, ...r });
     }
 

@@ -88,6 +88,17 @@ Deno.serve(async (req) => {
       }),
     }).catch((err) => console.warn("No se pudo mandar la notificación:", err));
 
+    // y a los dueños, al teléfono
+    await fetch(`${SUPABASE_URL}/functions/v1/enviar-push`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tipo: "duenos", ruta: "/pagos",
+        titulo: `Pago recibido · ${monto}`,
+        cuerpo: `${alumno.nombre} pagó con Mercado Pago (${PLAN_NOMBRE[planId] || planId} · ${dur.label}).`,
+      }),
+    }).catch((err) => console.warn("No se pudo avisar a los dueños:", err));
+
     if (RESEND_API_KEY) {
       await fetch("https://api.resend.com/emails", {
         method: "POST",
