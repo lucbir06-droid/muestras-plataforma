@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=36";
+import { sb } from "./supabase-client.js?v=37";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -395,10 +395,25 @@ export const Store = {
   /* ---- pagos ---- */
   pagos() { return C.pagos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
   async addPago(e) {
-    await insertar("pagos", {
+    const fila = {
       alumno_id: e.alumnoId || null, concepto: e.concepto, metodo: e.metodo, monto: e.monto, moneda: e.moneda,
       periodicidad: e.periodicidad || null, estado: e.estado || "pendiente",
-    });
+    };
+    if (e.fecha) fila.fecha = e.fecha; // si no, la base pone "ahora"
+    await insertar("pagos", fila);
+    await cargar("pagos");
+  },
+  // un cobro que estaba "pendiente" ya se pagó: cuenta desde hoy
+  async marcarPagoPagado(id, periodicidad) {
+    const patch = { estado: "pagado", fecha: new Date().toISOString() };
+    if (periodicidad) patch.periodicidad = periodicidad;
+    const { error } = await sb.from("pagos").update(patch).eq("id", id);
+    if (error) throw error;
+    await cargar("pagos");
+  },
+  async borrarPago(id) {
+    const { error } = await sb.from("pagos").delete().eq("id", id);
+    if (error) throw error;
     await cargar("pagos");
   },
   // avisa una sola vez por (alumno, tipo de aviso, fecha de corte): si ya se

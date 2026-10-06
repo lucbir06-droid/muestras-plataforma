@@ -776,3 +776,13 @@ create policy "bloqueos propios" on public.bloqueos for all to authenticated
 -- borrar mensajes: el dueño cualquiera (moderación), cada quien los suyos
 create policy "mensajes borrar" on public.mensajes for delete to authenticated
   using (public.es_dueno() or autor_id = auth.uid());
+
+-- ---------------------------------------------------------------
+-- PAGOS AUTOMÁTICOS DE MERCADO PAGO
+-- ---------------------------------------------------------------
+-- Cuando Mercado Pago aprueba un cobro, la función webhook-mp inserta el
+-- pago ya como "pagado". Esta columna guarda el número de operación de
+-- Mercado Pago para que el mismo cobro nunca se registre dos veces (MP
+-- puede avisar varias veces del mismo pago).
+alter table public.pagos add column if not exists mp_payment_id text;
+create unique index if not exists pagos_mp_payment_id_key on public.pagos (mp_payment_id) where mp_payment_id is not null;

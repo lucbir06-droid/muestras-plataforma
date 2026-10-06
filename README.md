@@ -224,6 +224,22 @@ código en Supabase → **Edge Functions → Create function** y publicar):
 Antes hay que volver a correr `supabase/schema.sql` en el SQL Editor: agrega
 la tabla `dispositivos`, donde se guarda qué teléfono es de cada cuenta.
 
+### 8. Pagos de Mercado Pago que se registran solos
+
+- `supabase/functions/crear-pago-mp/` — el botón "Pagar con Mercado Pago" del
+  panel crea un cobro ligado al alumno.
+- `supabase/functions/webhook-mp/` — Mercado Pago avisa cuando se aprueba y el
+  pago queda registrado como pagado, con la nueva fecha de corte. Esta función
+  va con **"Verify JWT" apagado** (la llama Mercado Pago, no un usuario).
+
+Las dos necesitan el secret `MP_ACCESS_TOKEN` (Mercado Pago → Tu negocio →
+Configuración → Credenciales de producción → Access Token) y volver a correr
+`supabase/schema.sql`. Los precios están repetidos en `crear-pago-mp`: si
+cambian en `assets/js/planes.js`, hay que cambiarlos también ahí.
+
+Mientras no esté conectado, el botón usa el link fijo de siempre y el dueño
+registra el pago a mano en **Pagos → Registrar un pago recibido**.
+
 ## App Store y Google Play
 
 Ya está armado el proyecto de la app nativa en [`mobile/`](mobile/) (con

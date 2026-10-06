@@ -562,3 +562,18 @@ body:has(.auth){
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
 }
 .foto-cambiar svg{width:14px;height:14px;}
+
+/* ---------- acciones de cada pago (dueño) ---------- */
+.pago-acciones{white-space:nowrap;}
+.pago-acciones:empty{display:none;}
+button.link{
+  background:none;border:0;padding:4px 0;cursor:pointer;margin-left:12px;
+  font-family:var(--display);font-size:.7rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent-2);
+}
+button.link:first-child{margin-left:0;}
+button.link-crit{color:var(--muted);}
+button.link-crit:hover{color:var(--crit);}
+@media (max-width:900px){
+  table.tbl td.pago-acciones{flex:1 0 100%;margin-left:0;display:flex;gap:18px;padding-top:2px;}
+  table.tbl td.pago-acciones button.link{margin-left:0;}
+}

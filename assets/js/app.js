@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=36";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=36";
-import { sb } from "./supabase-client.js?v=36";
+import { Store, toYMD } from "./store.js?v=37";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=37";
+import { sb } from "./supabase-client.js?v=37";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=36";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=36" en los imports de arriba son para que el navegador de
+   Los "?v=37" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=36" en el proyecto (app/index.html, store.js e
+   aparezca "?v=37" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1582,6 +1582,7 @@ function AlumnoDetail(id) {
         <button class="btn btn-ghost btn-sm" type="submit">Avisarle el monto</button>
         <p style="width:100%;font-size:.72rem;color:var(--muted);margin:0;">Queda como "Pago pendiente" y ${esc(a.nombre)} lo ve de inmediato en su suscripción, con el monto exacto.</p>
       </form>
+      <a class="btn btn-primary btn-sm" href="#/pagos?alumno=${a.id}">Registrar su pago</a>
       <button class="btn btn-ghost btn-sm" data-action="${a.habitosPremium ? "quitar-habitos-premium" : "activar-habitos-premium"}" data-id="${a.id}" data-nombre="${esc(a.nombre)}">
         ${a.habitosPremium ? "Quitar Hábitos Premium" : "Activar Hábitos Premium"}
       </button>
@@ -1888,8 +1889,47 @@ function Reportes() {
 
 /* ---------------- pagos (dueño) ---------------- */
 
+// Registrar a mano un pago que ya se recibió (transferencia, efectivo…).
+// Por default es la mensualidad: al guardarlo, la próxima fecha de pago
+// del alumno pasa a un mes después de la fecha del pago.
+function RegistrarPago(alumnoPreelegido) {
+  return `
+    <div class="block">
+      <div class="block-head"><h3>Registrar un pago recibido</h3></div>
+      <form class="card" data-action="add-pago">
+        <div class="field"><label>¿Quién pagó?</label>
+          <select name="alumnoId" required><option value="" disabled ${alumnoPreelegido ? "" : "selected"}>Elegir alumno…</option>${alumnoOptions(alumnoPreelegido)}</select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>¿Cuánto pagó?</label><input name="monto" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0.00" /></div>
+          <div class="field"><label>Moneda</label><select name="moneda"><option>MXN</option><option>USD</option></select></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>¿Cómo pagó?</label>
+            <select name="metodo">${METODOS_PAGO.map((m) => `<option ${m === "Transferencia" ? "selected" : ""}>${m}</option>`).join("")}</select>
+          </div>
+          <div class="field"><label>¿Qué día pagó?</label><input name="fecha" type="date" value="${toYMD(new Date())}" max="${toYMD(new Date())}" required /></div>
+        </div>
+        <div class="field"><label>¿Qué cubre?</label>
+          <select name="periodicidad">
+            <option value="mensual" selected>Mensualidad — su próximo pago es en 1 mes</option>
+            <option value="6meses">6 meses — su próximo pago es en 6 meses</option>
+            <option value="anual">Anual — su próximo pago es en 1 año</option>
+            <option value="">Otro cobro — no cambia su fecha de pago</option>
+          </select>
+        </div>
+        <div class="field"><label>Nota (opcional)</label><input name="concepto" placeholder="Ej. Mensualidad de octubre" /></div>
+        <button class="btn btn-primary" type="submit" style="width:100%;">Registrar pago</button>
+        <p style="font-size:.76rem;color:var(--muted);margin-top:12px;">
+          Queda como pagado y el alumno lo ve de inmediato en su suscripción, con su nueva fecha de pago.
+        </p>
+      </form>
+    </div>`;
+}
+
 function Pagos() {
   const pagos = Store.pagos();
+  const preelegido = new URLSearchParams(currentFullPath().split("?")[1] || "").get("alumno") || "";
   const ingresosMXN = pagos.filter((p) => p.estado === "pagado" && p.moneda === "MXN").reduce((s, p) => s + p.monto, 0);
   const ingresosUSD = pagos.filter((p) => p.estado === "pagado" && p.moneda === "USD").reduce((s, p) => s + p.monto, 0);
   const pendientes = pagos.filter((p) => p.estado === "pendiente").length;
@@ -1904,6 +1944,8 @@ function Pagos() {
       <div class="card stat"><span class="n">${fmtMoney(ingresosUSD, "USD")}</span><span class="l">Ingresos (USD)</span></div>
       <div class="card stat"><span class="n">${pendientes}</span><span class="l">Pagos pendientes</span></div>
     </div>
+
+    ${RegistrarPago(preelegido)}
 
     ${fechas.length ? `
     <div class="block">
@@ -1942,39 +1984,11 @@ function Pagos() {
     </div>
 
     <div class="block">
-      <div class="block-head"><h3>Registrar pago</h3></div>
-      <form class="card" data-action="add-pago">
-        <div class="field-row">
-          <div class="field"><label>Alumno</label>
-            <select name="alumnoId" required><option value="" disabled selected>Elegir…</option>${alumnoOptions()}</select>
-          </div>
-          <div class="field"><label>Concepto</label><input name="concepto" required placeholder="Plan mensual · Polanco" /></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Método</label>
-            <select name="metodo">${METODOS_PAGO.map((m) => `<option>${m}</option>`).join("")}</select>
-          </div>
-          <div class="field"><label>Periodicidad</label>
-            <select name="periodicidad"><option value="">Pago único</option><option value="mensual">Mensual</option><option value="6meses">6 meses</option><option value="anual">Anual</option></select>
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Moneda</label><select name="moneda"><option>MXN</option><option>USD</option></select></div>
-          <div class="field"><label>Monto</label><input name="monto" type="number" min="0" step="0.01" required /></div>
-        </div>
-        <div class="field"><label>Estado</label>
-          <select name="estado"><option value="pagado">Pagado</option><option value="pendiente">Pendiente</option></select>
-        </div>
-        <button class="btn btn-primary btn-sm" type="submit">Registrar</button>
-      </form>
-    </div>
-
-    <div class="block">
       <div class="block-head"><h3>Movimientos</h3></div>
       <div class="card scrollx">
         ${pagos.length ? `
         <table class="tbl">
-          <thead><tr><th>Alumno</th><th>Concepto</th><th>Método</th><th>Importe</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Alumno</th><th>Concepto</th><th>Método</th><th>Fecha</th><th>Importe</th><th>Estado</th><th></th></tr></thead>
           <tbody>
             ${pagos.map((p) => {
               const a = p.alumnoId ? Store.alumno(p.alumnoId) : null;
@@ -1982,8 +1996,13 @@ function Pagos() {
                 <td>${a ? `<a class="rowlink" href="#/alumnos/${a.id}">${esc(a.nombre)}</a>` : "—"}</td>
                 <td>${esc(p.concepto)}</td>
                 <td>${esc(p.metodo)}</td>
+                <td>${fmtDate(p.fecha)}</td>
                 <td class="num">${fmtMoney(p.monto, p.moneda)}</td>
                 <td>${estadoBadge(p.estado)}</td>
+                <td class="pago-acciones">
+                  ${p.estado === "pendiente" ? `<button type="button" class="link" data-action="marcar-pagado" data-id="${p.id}" data-nombre="${esc(a?.nombre || "este alumno")}" data-periodicidad="${p.periodicidad || ""}">Marcar pagado</button>` : ""}
+                  <button type="button" class="link link-crit" data-action="borrar-pago" data-id="${p.id}">Eliminar</button>
+                </td>
               </tr>`;
             }).join("")}
           </tbody>
@@ -2011,9 +2030,14 @@ function planDurOptions(selectedPlan, selectedDur) {
 // que desde afuera. Si un plan todavía no tiene link cargado, el botón
 // manda al formulario de abajo para que la academia lo gestione a mano.
 function PlanesPago() {
+  const mios = Store.alumnos();
   return `
     <div class="block">
       <div class="block-head"><h3>Elige tu plan y paga con Mercado Pago</h3></div>
+      ${mios.length > 1 ? `
+      <div class="field" style="max-width:360px;"><label>¿Para quién es el pago?</label>
+        <select id="pagoParaAlumno">${mios.map((a) => `<option value="${a.id}">${esc(a.nombre)}</option>`).join("")}</select>
+      </div>` : ""}
       <div class="plans">
         ${PLANES.map((p) => `
           <div class="card plan">
@@ -2024,10 +2048,13 @@ function PlanesPago() {
                 <li style="list-style:none;padding:0;margin-top:6px;">
                   <div class="row-sub" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">${esc(d.label)}</div>
                   <div class="price" style="margin-bottom:8px;">${fmtMXN(d.real)}</div>
-                  <a class="btn ${d.linkPago ? "btn-primary" : "btn-ghost"} btn-sm" style="width:100%;"
-                     href="${d.linkPago || `#/inscribirse?plan=${p.id}&dur=${d.id}`}" ${d.linkPago ? 'target="_blank" rel="noopener"' : ""}>
-                    ${d.linkPago ? "Pagar con Mercado Pago" : "Pedir este plan"}
-                  </a>
+                  ${d.linkPago && mios.length
+                    ? `<button type="button" class="btn btn-primary btn-sm" style="width:100%;" data-action="pagar-mp"
+                         data-plan="${p.id}" data-dur="${d.id}" data-alumno="${mios[0].id}" data-link="${d.linkPago}">Pagar con Mercado Pago</button>`
+                    : `<a class="btn ${d.linkPago ? "btn-primary" : "btn-ghost"} btn-sm" style="width:100%;"
+                         href="${d.linkPago || `#/inscribirse?plan=${p.id}&dur=${d.id}`}" ${d.linkPago ? 'target="_blank" rel="noopener"' : ""}>
+                        ${d.linkPago ? "Pagar con Mercado Pago" : "Pedir este plan"}
+                      </a>`}
                 </li>`).join("")}
             </ul>
           </div>`).join("")}
@@ -2677,8 +2704,17 @@ view.addEventListener("submit", async (e) => {
       await Store.addSolicitud({ nombre: data.nombre.trim(), edad: Number(data.edad), telefono: data.telefono.trim(), pais: data.pais.trim(), zona: data.zona.trim(), sede: data.sede, mensaje: data.mensaje?.trim() || "" });
       toast("Solicitud enviada");
     } else if (action === "add-pago") {
-      await Store.addPago({ alumnoId: data.alumnoId, concepto: data.concepto.trim(), metodo: data.metodo, moneda: data.moneda, monto: Number(data.monto), periodicidad: data.periodicidad, estado: data.estado });
-      toast("Pago registrado");
+      const cubre = { mensual: "Mensualidad", "6meses": "Plan de 6 meses", anual: "Plan anual" }[data.periodicidad] || "Pago";
+      // al mediodía local: así ninguna zona horaria lo corre al día anterior
+      const fechaPago = data.fecha === toYMD(new Date()) ? new Date() : new Date(`${data.fecha}T12:00:00`);
+      await Store.addPago({
+        alumnoId: data.alumnoId, concepto: data.concepto.trim() || cubre, metodo: data.metodo, moneda: data.moneda,
+        monto: Number(data.monto), periodicidad: data.periodicidad, estado: "pagado", fecha: fechaPago.toISOString(),
+      });
+      const alumnoPago = Store.alumno(data.alumnoId);
+      const proxima = data.periodicidad ? fechaVencimiento(data.alumnoId) : null;
+      toast(proxima ? `Pago registrado — ${alumnoPago?.nombre || "el alumno"} paga de nuevo el ${fmtDate(proxima)}` : "Pago registrado");
+      if (currentFullPath().includes("alumno=")) location.hash = "#/pagos";
     } else if (action === "cobrar-monto") {
       await Store.addPago({ alumnoId: form.dataset.alumno, concepto: data.concepto.trim(), metodo: "Mercado Pago", moneda: data.moneda, monto: Number(data.monto), estado: "pendiente" });
       toast("Monto avisado — ya aparece en su suscripción");
@@ -2735,6 +2771,54 @@ view.addEventListener("submit", async (e) => {
 view.addEventListener("click", async (e) => {
   try {
     if (e.target.closest("[data-action='cerrar-sesion']")) return void cerrarSesion();
+
+    /* ---- pagos (dueño) ---- */
+    const marcarPagadoBtn = e.target.closest("[data-action='marcar-pagado']");
+    if (marcarPagadoBtn) {
+      let periodicidad = marcarPagadoBtn.dataset.periodicidad;
+      if (!periodicidad) {
+        // un cobro pendiente no dice qué cubre: preguntarlo, porque de eso
+        // depende que se mueva (o no) la próxima fecha de pago
+        const esMensualidad = confirm(
+          `¿El pago de ${marcarPagadoBtn.dataset.nombre} es su mensualidad?\n\n` +
+          "Aceptar: sí — su próxima fecha de pago pasa a dentro de un mes.\n" +
+          "Cancelar: es otro cobro — no cambia su fecha de pago.");
+        periodicidad = esMensualidad ? "mensual" : "";
+      }
+      await Store.marcarPagoPagado(marcarPagadoBtn.dataset.id, periodicidad);
+      toast("Pago marcado como pagado");
+      return void render();
+    }
+    const borrarPagoBtn = e.target.closest("[data-action='borrar-pago']");
+    if (borrarPagoBtn) {
+      if (!confirm("¿Eliminar este pago del registro? Si era el último pago del alumno, su fecha de pago vuelve a la anterior.")) return;
+      await Store.borrarPago(borrarPagoBtn.dataset.id);
+      toast("Pago eliminado");
+      return void render();
+    }
+
+    /* ---- pagar con Mercado Pago (se registra solo al aprobarse) ---- */
+    const pagarMpBtn = e.target.closest("[data-action='pagar-mp']");
+    if (pagarMpBtn) {
+      const alumnoId = document.getElementById("pagoParaAlumno")?.value || pagarMpBtn.dataset.alumno;
+      const textoOriginal = pagarMpBtn.textContent;
+      pagarMpBtn.disabled = true; pagarMpBtn.textContent = "Abriendo Mercado Pago…";
+      let url = null;
+      try {
+        const { data: res, error } = await sb.functions.invoke("crear-pago-mp", {
+          body: { alumnoId, planId: pagarMpBtn.dataset.plan, durId: pagarMpBtn.dataset.dur },
+        });
+        if (!error && res?.success) url = res.url;
+        else console.warn("crear-pago-mp:", error || res?.message);
+      } catch (err) {
+        console.warn("crear-pago-mp:", err);
+      }
+      pagarMpBtn.disabled = false; pagarMpBtn.textContent = textoOriginal;
+      // si el cobro automático todavía no está conectado, se usa el link
+      // fijo de siempre (ese pago lo registra la academia a mano)
+      location.href = url || pagarMpBtn.dataset.link;
+      return;
+    }
 
     /* ---- moderación del chat ---- */
     const reportarBtn = e.target.closest("[data-action='reportar-mensaje']");
