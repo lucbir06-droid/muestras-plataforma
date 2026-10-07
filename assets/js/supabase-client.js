@@ -36,6 +36,32 @@ function candadoSesion(_nombre, _espera, fn) {
   return turno;
 }
 
+// Reintentos cuando falla la red.
+//
+// Con mala señal el teléfono a veces corta una petición a medio camino
+// (Safari lo reporta como "Load failed"). Sin esto, ese corte dejaba la app
+// a medias: no dejaba iniciar sesión, o cargaba el panel sin la lista de
+// alumnos. Ahora se intenta hasta 3 veces antes de darse por vencido.
+//
+// Solo se reintenta lo que es seguro repetir: las lecturas (GET) y el
+// inicio/renovación de sesión. Guardar algo (un pago, un mensaje, una foto)
+// NO se repite solo: si el primer intento sí había llegado, quedaría doble.
+async function fetchConReintento(url, opciones = {}) {
+  const metodo = (opciones.method || "GET").toUpperCase();
+  const seguro = metodo === "GET" || metodo === "HEAD" || String(url).includes("/auth/v1/token");
+  const esperas = seguro ? [600, 1600] : [];
+  for (let intento = 0; ; intento++) {
+    try {
+      return await fetch(url, opciones);
+    } catch (err) {
+      // AbortError = lo canceló la propia app; cualquier otro TypeError = red
+      if (err?.name === "AbortError" || intento >= esperas.length) throw err;
+      await new Promise((ok) => setTimeout(ok, esperas[intento]));
+    }
+  }
+}
+
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: { lock: candadoSesion },
+  global: { fetch: fetchConReintento },
 });

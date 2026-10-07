@@ -686,3 +686,13 @@ button.link-crit:hover{color:var(--crit);}
   .slot form[data-action="reservar-slot"]{flex:1 0 100%;}
   .slot form[data-action="reservar-slot"] select{flex:1;min-width:0 !important;}
 }
+
+/* ---------- aviso de datos sin cargar / renglón de cobro ---------- */
+.aviso-red{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  margin:0 0 18px;border-color:var(--warn);background:var(--warn-soft);
+}
+.aviso-red > div{flex:1;min-width:200px;}
+.fila-corte{align-items:center;flex-wrap:nowrap;gap:12px;}
+.fila-corte a.grow{min-width:0;}
+.fila-corte .btn{flex:none;}

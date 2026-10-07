@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=40";
+import { sb } from "./supabase-client.js?v=41";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -150,10 +150,20 @@ const TABLAS = {
   }) },
 };
 
+// tablas que no se pudieron traer en el último intento (por mala señal):
+// el panel avisa con un botón de "Reintentar" en vez de mostrar listas vacías
+const fallidas = new Set();
+const esDeRed = (error) => /load failed|failed to fetch|networkerror|network request failed|timeout/i.test(String(error?.message || error));
+
 async function cargar(clave) {
   const def = TABLAS[clave];
   const { data, error } = await sb.from(def.tabla).select("*").order(def.orden[0], { ascending: def.orden[1] });
-  if (error) { console.warn(`No se pudo cargar "${def.tabla}":`, error.message); return; }
+  if (error) {
+    console.warn(`No se pudo cargar "${def.tabla}":`, error.message);
+    if (esDeRed(error)) fallidas.add(clave);
+    return;
+  }
+  fallidas.delete(clave);
   C[clave] = (data || []).map(def.map);
 }
 
@@ -180,10 +190,12 @@ export const Store = {
   },
   clear() {
     for (const k of Object.keys(C)) C[k] = [];
+    fallidas.clear();
     cargadoDe = null;
     cargandoPara = null;
   },
   recargar(...claves) { return Promise.all(claves.map(cargar)); },
+  hayDatosSinCargar() { return fallidas.size > 0; },
   // vuelve a traer todas las tablas (lo que cambió otra persona mientras
   // esta pantalla estaba abierta: profe asignado, pagos, mensajes…)
   refrescar() { return Promise.all(Object.keys(TABLAS).map(cargar)); },

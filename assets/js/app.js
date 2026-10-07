@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=40";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=40";
-import { sb } from "./supabase-client.js?v=40";
+import { Store, toYMD } from "./store.js?v=41";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=41";
+import { sb } from "./supabase-client.js?v=41";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=40";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=40" en los imports de arriba son para que el navegador de
+   Los "?v=41" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=40" en el proyecto (app/index.html, store.js e
+   aparezca "?v=41" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -302,6 +302,12 @@ function render() {
     html = `<div class="empty">No encontramos esa página. <a href="#/" style="color:var(--accent-2)">Volver al panel</a>.</div>`;
   }
 
+  if (Store.hayDatosSinCargar()) {
+    html = `<div class="mp-note aviso-red">
+        <div><b>Faltó cargar parte de la información.</b> Suele ser la señal: por eso puede que veas listas vacías.</div>
+        <button type="button" class="btn btn-primary btn-sm" data-action="recargar-datos">Reintentar</button>
+      </div>` + html;
+  }
   pageTitle.textContent = title;
   view.innerHTML = html;
   const topAvatar = document.getElementById("topAvatar");
@@ -316,6 +322,9 @@ function render() {
     view.classList.add("entra");
   }
 
+  if (path === "/pagos" && currentFullPath().includes("alumno=")) {
+    document.getElementById("registrarPago")?.scrollIntoView({ block: "start" });
+  }
   if (path === "/chat") {
     iniciarPollChat();
     const box = document.getElementById("chatMessages");
@@ -555,7 +564,10 @@ function wireAuthForms() {
         // ---- iniciar sesión ----
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) {
-          showLogin(error.message.includes("Invalid") ? "Correo o contraseña incorrectos." : error.message);
+          const sinRed = /load failed|failed to fetch|networkerror|network request failed/i.test(error.message);
+          showLogin(error.message.includes("Invalid") ? "Correo o contraseña incorrectos."
+            : sinRed ? "No pudimos conectar con el servidor. Revisa tu señal o tu wifi y vuelve a tocar Entrar."
+            : error.message);
         } else {
           location.hash = "#/"; // mismo motivo que arriba
         }
@@ -2080,19 +2092,47 @@ function Reportes() {
 
 /* ---------------- pagos (dueño) ---------------- */
 
+// Cuánto paga normalmente un alumno, para no tener que teclearlo cada mes:
+// lo último que pagó o, si todavía no hay pagos, la mensualidad de su sede.
+function montoSugerido(a) {
+  const ultimo = Store.pagos().find((p) => p.alumnoId === a.id && p.estado === "pagado" && p.periodicidad === "mensual");
+  if (ultimo) return { monto: ultimo.monto, moneda: ultimo.moneda || "MXN" };
+  const planId = a.sedes.includes("Polanco") && a.sedes.includes("Metepec") ? "ambas" : a.sedes.includes("Polanco") ? "polanco" : a.sedes.includes("Metepec") ? "metepec" : null;
+  const mensual = PLANES.find((p) => p.id === planId)?.duraciones.find((d) => d.id === "mensual");
+  return mensual ? { monto: mensual.real, moneda: "MXN" } : null;
+}
+
+// renglón de un alumno con su fecha de corte: tocarlo abre "Registrar pago"
+// con ese alumno ya elegido, y "Ya pagó" lo registra de un toque
+function filaCorte(a, etiqueta, kind) {
+  const sug = montoSugerido(a);
+  return `
+    <div class="row-card fila-corte">
+      <a class="grow" href="#/pagos?alumno=${a.id}">
+        <div class="row-title">${esc(a.nombre)}</div>
+        <div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sedes.join(" / "))}</div>
+        <div style="margin-top:8px;">${badge(etiqueta, kind)}</div>
+      </a>
+      <button type="button" class="btn btn-primary btn-sm" data-action="ya-pago" data-id="${a.id}"
+        data-nombre="${esc(a.nombre)}" data-monto="${sug?.monto ?? ""}" data-moneda="${sug?.moneda || "MXN"}">Ya pagó</button>
+    </div>`;
+}
+
 // Registrar a mano un pago que ya se recibió (transferencia, efectivo…).
 // Por default es la mensualidad: al guardarlo, la próxima fecha de pago
 // del alumno pasa a un mes después de la fecha del pago.
 function RegistrarPago(alumnoPreelegido) {
+  const elegido = alumnoPreelegido ? Store.alumno(alumnoPreelegido) : null;
+  const sug = elegido ? montoSugerido(elegido) : null;
   return `
-    <div class="block">
-      <div class="block-head"><h3>Registrar un pago recibido</h3></div>
+    <div class="block" id="registrarPago">
+      <div class="block-head"><h3>Registrar un pago recibido${elegido ? ` — ${esc(elegido.nombre)}` : ""}</h3></div>
       <form class="card" data-action="add-pago">
         <div class="field"><label>¿Quién pagó?</label>
           <select name="alumnoId" required><option value="" disabled ${alumnoPreelegido ? "" : "selected"}>Elegir alumno…</option>${alumnoOptions(alumnoPreelegido)}</select>
         </div>
         <div class="field-row">
-          <div class="field"><label>¿Cuánto pagó?</label><input name="monto" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0.00" /></div>
+          <div class="field"><label>¿Cuánto pagó?</label><input name="monto" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0.00" value="${sug?.monto ?? ""}" /></div>
           <div class="field"><label>Moneda</label><select name="moneda"><option>MXN</option><option>USD</option></select></div>
         </div>
         <div class="field-row">
@@ -2142,11 +2182,10 @@ function Pagos() {
     <div class="block">
       <div class="block-head"><h3>Fecha de corte por alumno</h3></div>
       <div class="list">
-        ${fechas.map(({ a, vence }) => `
-          <a class="row-card" href="#/alumnos/${a.id}">
-            <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria || "sin división")} · ${esc(a.sedes.join(" / "))}</div></div>
-            ${badge(vence < new Date(new Date().toDateString()) ? `Venció ${fmtDate(vence)}` : `Corte: ${fmtDate(vence)}`, vence < new Date(new Date().toDateString()) ? "crit" : "ok")}
-          </a>`).join("")}
+        ${fechas.map(({ a, vence }) => {
+          const vencido = vence < new Date(new Date().toDateString());
+          return filaCorte(a, vencido ? `Venció ${fmtDate(vence)}` : `Corte: ${fmtDate(vence)}`, vencido ? "crit" : "ok");
+        }).join("")}
       </div>
     </div>` : ""}
 
@@ -2405,20 +2444,12 @@ function Duenos() {
       ${vencidos.length ? `
         <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--crit);margin-bottom:10px;">Vencidos — cobrar</p>
         <div class="list" style="margin-bottom:18px;">
-          ${vencidos.map(({ a, vence }) => `
-            <a class="row-card" href="#/alumnos/${a.id}">
-              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</div></div>
-              ${badge(`Venció ${fmtDate(vence)}`, "crit")}
-            </a>`).join("")}
+          ${vencidos.map(({ a, vence }) => filaCorte(a, `Venció ${fmtDate(vence)}`, "crit")).join("")}
         </div>` : ""}
       ${porVencer.length ? `
         <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);margin-bottom:10px;">Vencen esta semana</p>
         <div class="list">
-          ${porVencer.map(({ a, vence }) => `
-            <a class="row-card" href="#/alumnos/${a.id}">
-              <div class="grow"><div class="row-title">${esc(a.nombre)}</div><div class="row-sub">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</div></div>
-              ${badge(`Corte ${fmtDate(vence)}`, "warn")}
-            </a>`).join("")}
+          ${porVencer.map(({ a, vence }) => filaCorte(a, `Corte ${fmtDate(vence)}`, "warn")).join("")}
         </div>` : ""}
     </div>` : ""}
 
@@ -3027,6 +3058,15 @@ view.addEventListener("click", async (e) => {
   try {
     if (e.target.closest("[data-action='cerrar-sesion']")) return void cerrarSesion();
 
+    const recargarBtn = e.target.closest("[data-action='recargar-datos']");
+    if (recargarBtn) {
+      recargarBtn.disabled = true; recargarBtn.textContent = "Cargando…";
+      await Store.refrescar();
+      render();
+      toast(Store.hayDatosSinCargar() ? "Sigue sin conexión — intenta de nuevo en un momento" : "Listo, información actualizada");
+      return;
+    }
+
     /* ---- agenda: cambiar de mes / tocar un día ---- */
     const agendaMes = e.target.closest("[data-action='agenda-mes']");
     if (agendaMes) {
@@ -3064,6 +3104,25 @@ view.addEventListener("click", async (e) => {
       if (!confirm(de ? `¿Eliminar la clase de ${de}? Se borra de su agenda.` : "¿Eliminar este hueco de la agenda?")) return;
       await Store.borrarReserva(borrarClase.dataset.id);
       toast("Clase eliminada");
+      return void render();
+    }
+
+    /* ---- "Ya pagó": registra la mensualidad de un toque ---- */
+    const yaPagoBtn = e.target.closest("[data-action='ya-pago']");
+    if (yaPagoBtn) {
+      const { id, nombre, moneda } = yaPagoBtn.dataset;
+      let monto = Number(yaPagoBtn.dataset.monto);
+      if (!monto) {
+        const escrito = prompt(`¿Cuánto pagó ${nombre}? (solo el número)`);
+        if (escrito === null) return;
+        monto = Number(String(escrito).replace(/[^0-9.]/g, ""));
+        if (!monto) { toast("Escribe el monto con números"); return; }
+      }
+      if (!confirm(`¿Registrar que ${nombre} pagó ${fmtMoney(monto, moneda)}?\n\nMensualidad · Transferencia · hoy.\nSu próxima fecha de pago pasa a dentro de un mes.\n\n(Si fue otro monto, método o día, cancela y toca su nombre.)`)) return;
+      yaPagoBtn.disabled = true;
+      await Store.addPago({ alumnoId: id, concepto: "Mensualidad", metodo: "Transferencia", moneda, monto, periodicidad: "mensual", estado: "pagado" });
+      const proxima = fechaVencimiento(id);
+      toast(proxima ? `Listo — ${nombre} paga de nuevo el ${fmtDate(proxima)}` : "Pago registrado");
       return void render();
     }
 
