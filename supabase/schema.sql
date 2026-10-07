@@ -529,15 +529,18 @@ create policy "perfiles editar propio" on public.perfiles for update to authenti
 create policy "perfiles dueno edita" on public.perfiles for update to authenticated
   using (public.es_dueno()) with check (public.es_dueno());
 
--- alumnos: cada rol ve lo suyo (ver puede_ver_alumno); solo el dueño
--- da de alta o baja; el staff edita las fichas que puede ver.
+-- alumnos: el staff (dueños y profes) ve a TODOS; el papá/alumno solo a
+-- los suyos. Antes un profe solo veía a los alumnos asignados a él (o sin
+-- asignar): en cuanto el dueño le ponía profe a un alumno, los demás
+-- profes dejaban de verlo y no podían pasarle lista ni hacer el check-out,
+-- aunque entrenaran juntos en la misma sede. Solo el dueño da de alta o baja.
 create policy "alumnos ver" on public.alumnos for select to authenticated
-  using (public.puede_ver_alumno(id));
+  using (public.es_staff() or public.puede_ver_alumno(id));
 create policy "alumnos alta" on public.alumnos for insert to authenticated
   with check (public.es_dueno());
 create policy "alumnos editar" on public.alumnos for update to authenticated
-  using (public.es_staff() and public.puede_ver_alumno(id))
-  with check (public.es_staff() and public.puede_ver_alumno(id));
+  using (public.es_staff())
+  with check (public.es_staff());
 create policy "alumnos baja" on public.alumnos for delete to authenticated
   using (public.es_dueno());
 
@@ -553,13 +556,13 @@ create policy "vinculos baja" on public.alumno_usuarios for delete to authentica
 
 -- bitácora / reportes: los ve quien puede ver al alumno; los escribe el staff
 create policy "bitacora ver" on public.bitacora for select to authenticated
-  using (alumno_id is not null and public.puede_ver_alumno(alumno_id));
+  using (alumno_id is not null and (public.es_staff() or public.puede_ver_alumno(alumno_id)));
 create policy "bitacora escribir" on public.bitacora for insert to authenticated
-  with check (public.es_staff() and public.puede_ver_alumno(alumno_id));
+  with check (public.es_staff());
 create policy "bitacora editar" on public.bitacora for update to authenticated
-  using (public.es_staff() and public.puede_ver_alumno(alumno_id));
+  using (public.es_staff());
 create policy "bitacora borrar" on public.bitacora for delete to authenticated
-  using (public.es_staff() and public.puede_ver_alumno(alumno_id));
+  using (public.es_staff());
 
 -- agenda: el staff ve todo el calendario; el alumno solo sus sesiones
 create policy "reservas ver" on public.reservas for select to authenticated
@@ -573,14 +576,14 @@ create policy "reservas borrar" on public.reservas for delete to authenticated
 
 -- asistencia
 create policy "asistencias ver" on public.asistencias for select to authenticated
-  using (public.puede_ver_alumno(alumno_id));
+  using (public.es_staff() or public.puede_ver_alumno(alumno_id));
 create policy "asistencias crear" on public.asistencias for insert to authenticated
-  with check (public.es_staff() and public.puede_ver_alumno(alumno_id));
+  with check (public.es_staff());
 create policy "asistencias editar" on public.asistencias for update to authenticated
-  using (public.es_staff() and public.puede_ver_alumno(alumno_id))
-  with check (public.es_staff() and public.puede_ver_alumno(alumno_id));
+  using (public.es_staff())
+  with check (public.es_staff());
 create policy "asistencias borrar" on public.asistencias for delete to authenticated
-  using (public.es_staff() and public.puede_ver_alumno(alumno_id));
+  using (public.es_staff());
 
 -- solicitudes de clase de prueba: cualquiera con sesión manda la suya
 -- y ve solo las suyas; el staff ve y gestiona todas.

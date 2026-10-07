@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Chakra+Petch:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="../assets/css/brand.css?v=37" />
-<link rel="stylesheet" href="../assets/css/app.css?v=37" />
+<link rel="stylesheet" href="../assets/css/brand.css?v=38" />
+<link rel="stylesheet" href="../assets/css/app.css?v=38" />
 </head>
 <body>
 
@@ -81,7 +81,43 @@
   </div>
 </div>
 
+<!-- Rescate: si el panel no termina de cargar (mala señal, sesión trabada,
+     un archivo que no bajó), en vez de dejar la pantalla en blanco muestra
+     cómo salir. Va como script normal (no módulo) para que funcione aunque
+     falle todo lo demás. -->
+<script>
+(function () {
+  var view = document.getElementById("view"), atorado = 0, mostrado = false;
+  function cargando() {
+    var t = (view.textContent || "").trim();
+    return t === "" || t.indexOf("Cargando") === 0;
+  }
+  function rescate() {
+    mostrado = true;
+    view.style.padding = "";
+    view.innerHTML =
+      '<div class="card" style="max-width:420px;margin:40px auto;text-align:center;">' +
+      '<div class="row-title" style="font-size:1.05rem;margin-bottom:8px;">No se pudo cargar</div>' +
+      '<p style="font-size:.86rem;color:var(--muted);margin-bottom:18px;">Puede ser la señal. Intenta de nuevo; si sigue igual, reinicia tu sesión y vuelve a entrar con tu correo y contraseña.</p>' +
+      '<button class="btn btn-primary" style="width:100%;margin-bottom:10px;" id="rescateReintentar">Intentar de nuevo</button>' +
+      '<button class="btn btn-ghost" style="width:100%;" id="rescateReiniciar">Reiniciar mi sesión</button></div>';
+    document.getElementById("rescateReintentar").onclick = function () { location.reload(); };
+    document.getElementById("rescateReiniciar").onclick = function () {
+      try {
+        Object.keys(localStorage).forEach(function (k) { if (k.indexOf("sb-") === 0) localStorage.removeItem(k); });
+      } catch (e) {}
+      location.hash = "#/login";
+      location.reload();
+    };
+  }
+  setInterval(function () {
+    if (mostrado) { if (!document.getElementById("rescateReintentar")) mostrado = false; return; }
+    atorado = cargando() ? atorado + 1 : 0;
+    if (atorado >= 6) rescate(); // 6 revisiones de 2 s = 12 s sin avanzar
+  }, 2000);
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script type="module" src="../assets/js/app.js?v=37"></script>
+<script type="module" src="../assets/js/app.js?v=38"></script>
 </body>
 </html>

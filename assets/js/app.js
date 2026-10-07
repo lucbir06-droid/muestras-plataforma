@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=37";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=37";
-import { sb } from "./supabase-client.js?v=37";
+import { Store, toYMD } from "./store.js?v=38";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=38";
+import { sb } from "./supabase-client.js?v=38";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=37";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=37" en los imports de arriba son para que el navegador de
+   Los "?v=38" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=37" en el proyecto (app/index.html, store.js e
+   aparezca "?v=38" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
