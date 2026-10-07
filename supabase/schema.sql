@@ -804,3 +804,11 @@ create policy "mensajes borrar" on public.mensajes for delete to authenticated
 -- puede avisar varias veces del mismo pago).
 alter table public.pagos add column if not exists mp_payment_id text;
 create unique index if not exists pagos_mp_payment_id_key on public.pagos (mp_payment_id) where mp_payment_id is not null;
+
+-- ---------------------------------------------------------------
+-- AGENDA — recordatorio de la clase de mañana
+-- ---------------------------------------------------------------
+-- La función programada (revisar-avisos-pago, una vez al día) manda una
+-- notificación a quien tiene clase al día siguiente y marca la reserva,
+-- para no avisar dos veces de la misma clase.
+alter table public.reservas add column if not exists recordado boolean not null default false;

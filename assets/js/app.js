@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=39";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=39";
-import { sb } from "./supabase-client.js?v=39";
+import { Store, toYMD } from "./store.js?v=40";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=40";
+import { sb } from "./supabase-client.js?v=40";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=39";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=39" en los imports de arriba son para que el navegador de
+   Los "?v=40" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=39" en el proyecto (app/index.html, store.js e
+   aparezca "?v=40" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -671,6 +671,14 @@ async function iniciarPush(usuario) {
 function avisarMensajeNuevo() {
   sb.functions.invoke("enviar-push", { body: { tipo: "mensaje" } })
     .catch((err) => console.warn("No se pudo mandar la notificación del mensaje:", err));
+}
+
+// le avisa al papá/alumno que le agendaron una clase (el recordatorio del
+// día anterior lo manda sola la función programada revisar-avisos-pago)
+function avisarClaseNueva(reservaId) {
+  if (!reservaId) return;
+  sb.functions.invoke("enviar-push", { body: { tipo: "clase", reservaId } })
+    .catch((err) => console.warn("No se pudo avisar de la clase nueva:", err));
 }
 
 async function cerrarSesion() {
@@ -1774,41 +1782,97 @@ function AlumnoDetail(id) {
 
 /* ---------------- agenda ---------------- */
 
-// qué mes se está viendo y qué día está tocado (null = todo el mes)
-const ctxAgenda = { mes: toYMD(new Date()).slice(0, 7), dia: null };
+// qué mes se está viendo, qué día está tocado y si está abierto el
+// formulario de "agregar clase" de ese día
+const ctxAgenda = { mes: toYMD(new Date()).slice(0, 7), dia: toYMD(new Date()), agregando: false };
 
-// calendario del mes: cada día con sesiones lleva sus puntos (verde =
-// confirmada, gris = hueco disponible) y se puede tocar para ver su detalle
+function nombreCorto(alumno) {
+  return alumno ? alumno.nombre.split(" ")[0] : "Libre";
+}
+
+// Calendario del mes a todo el ancho, como el del teléfono: cada día es
+// una celda con sus clases adentro (hora + alumno; en pantallas chicas solo
+// la hora) y se toca para ver el detalle y agregar.
 function CalendarioAgenda(byDay) {
   const [anio, mes] = ctxAgenda.mes.split("-").map(Number);
   const primero = new Date(anio, mes - 1, 1);
   const diasDelMes = new Date(anio, mes, 0).getDate();
   const huecos = (primero.getDay() + 6) % 7; // la semana empieza en lunes
   const hoy = toYMD(new Date());
-  const titulo = primero.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  const nombreMes = primero.toLocaleDateString("es-MX", { month: "long" });
+  const MAX = 3; // clases visibles por celda; el resto va como "+N"
   const celdas = [];
   for (let i = 0; i < huecos; i++) celdas.push(`<span class="cal-dia vacio"></span>`);
   for (let d = 1; d <= diasDelMes; d++) {
     const key = `${ctxAgenda.mes}-${String(d).padStart(2, "0")}`;
-    const sesiones = byDay[key] || [];
-    const confirmadas = sesiones.filter((r) => r.estado !== "disponible").length;
-    const libres = sesiones.length - confirmadas;
-    const clases = ["cal-dia", key === hoy ? "hoy" : "", key === ctxAgenda.dia ? "sel" : "", sesiones.length ? "con" : ""].join(" ");
-    celdas.push(`<button type="button" class="${clases}" data-action="agenda-dia" data-dia="${key}" aria-label="${fmtDateLong(key)}${sesiones.length ? `, ${sesiones.length} sesiones` : ""}">
+    const sesiones = (byDay[key] || []).slice().sort((a, b) => a.hora.localeCompare(b.hora));
+    const clases = ["cal-dia", key === hoy ? "hoy" : "", key === ctxAgenda.dia ? "sel" : "", key < hoy ? "pasado" : ""].join(" ");
+    celdas.push(`<button type="button" class="${clases}" data-action="agenda-dia" data-dia="${key}" aria-label="${fmtDateLong(key)}${sesiones.length ? `, ${sesiones.length} clases` : ""}">
       <b>${d}</b>
-      <i>${"<u></u>".repeat(Math.min(confirmadas, 3))}${"<u class='libre'></u>".repeat(Math.min(libres, 3 - Math.min(confirmadas, 3)))}</i>
+      <span class="cal-evs">
+        ${sesiones.slice(0, MAX).map((r) => `<span class="cal-ev ${r.estado === "disponible" ? "libre" : ""}"><em>${esc(r.hora)}</em><i>${esc(nombreCorto(r.alumnoId ? Store.alumno(r.alumnoId) : null))}</i></span>`).join("")}
+        ${sesiones.length > MAX ? `<span class="cal-mas">+${sesiones.length - MAX}</span>` : ""}
+      </span>
     </button>`);
   }
+  // completa la última semana para que la cuadrícula cierre pareja
+  while (celdas.length % 7) celdas.push(`<span class="cal-dia vacio"></span>`);
   return `
-    <div class="card calendario">
+    <div class="calendario">
       <div class="cal-cabecera">
-        <button type="button" class="cal-nav" data-action="agenda-mes" data-delta="-1" aria-label="Mes anterior">‹</button>
-        <h3>${esc(titulo)}</h3>
-        <button type="button" class="cal-nav" data-action="agenda-mes" data-delta="1" aria-label="Mes siguiente">›</button>
+        <h2><b>${esc(nombreMes)}</b> ${anio}</h2>
+        <div class="cal-navs">
+          <button type="button" class="cal-nav" data-action="agenda-mes" data-delta="-1" aria-label="Mes anterior">‹</button>
+          <button type="button" class="cal-hoy" data-action="agenda-hoy">Hoy</button>
+          <button type="button" class="cal-nav" data-action="agenda-mes" data-delta="1" aria-label="Mes siguiente">›</button>
+        </div>
       </div>
-      <div class="cal-semana"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+      <div class="cal-semana"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
       <div class="cal-grid">${celdas.join("")}</div>
-      <div class="cal-leyenda"><span><u></u> Sesión confirmada</span>${esStaff() ? `<span><u class="libre"></u> Hueco disponible</span>` : ""}</div>
+    </div>`;
+}
+
+// lo que pasa el día tocado: sus clases y, para el staff, agregar una
+function DiaAgenda(byDay) {
+  const dia = ctxAgenda.dia;
+  if (!dia) return "";
+  const sesiones = (byDay[dia] || []).slice().sort((a, b) => a.hora.localeCompare(b.hora));
+  const titulo = parseFecha(dia).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+  const pasado = dia < toYMD(new Date());
+  return `
+    <div class="cal-detalle">
+      <div class="block-head">
+        <h3>${esc(titulo)}</h3>
+        ${esStaff() && !ctxAgenda.agregando ? `<button type="button" class="btn btn-primary btn-sm" data-action="agenda-agregar">${icon("i-plus")} Agregar clase</button>` : ""}
+      </div>
+
+      ${esStaff() && ctxAgenda.agregando ? `
+      <form class="card" data-action="add-clase-dia" style="margin-bottom:14px;">
+        <div class="field-row">
+          <div class="field"><label>Hora</label><input type="time" name="hora" required value="19:00" /></div>
+          <div class="field"><label>Tipo de clase</label>
+            <select name="tipo">${TIPOS_SLOT.map((t) => `<option value="${t.tipo}" ${t.tipo === "Entrenamiento individual" ? "selected" : ""}>${t.tipo} · ${t.duracion} min</option>`).join("")}</select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Sede</label>
+            <select name="sede">${SEDES_AGENDA.map((s) => `<option>${s}</option>`).join("")}</select>
+          </div>
+          <div class="field"><label>Alumno</label>
+            <select name="alumnoId"><option value="">Dejar como hueco disponible</option>${alumnoOptions()}</select>
+          </div>
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-primary btn-sm" type="submit">Guardar clase</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-action="agenda-agregar">Cancelar</button>
+        </div>
+        <p style="font-size:.76rem;color:var(--muted);margin-top:12px;">
+          Si eliges un alumno, le llega una notificación ahora y un recordatorio un día antes de la clase.
+        </p>
+      </form>` : ""}
+
+      ${sesiones.length ? sesiones.map(slotRow).join("")
+        : `<div class="empty">${pasado ? "No hubo clases este día." : esStaff() ? "No hay clases este día. Toca “Agregar clase” para crear una." : "No tienes clases este día."}</div>`}
     </div>`;
 }
 
@@ -1819,60 +1883,40 @@ function Agenda() {
     const key = r.fecha.slice(0, 10);
     (byDay[key] ||= []).push(r);
   });
-  // debajo del calendario: el día tocado, o todo lo del mes que se está viendo
-  const days = Object.keys(byDay).sort().filter((d) => (ctxAgenda.dia ? d === ctxAgenda.dia : d.startsWith(ctxAgenda.mes)));
+  const proximas = reservas.filter((r) => r.fecha.slice(0, 10) >= toYMD(new Date()) && r.estado !== "disponible").slice(0, 4);
 
   return `
+    ${CalendarioAgenda(byDay)}
+    ${DiaAgenda(byDay)}
+
+    ${esAlumno() && proximas.length ? `
+    <div class="block" style="margin-top:26px;">
+      <div class="block-head"><h3>Tus próximas clases</h3></div>
+      ${proximas.map((r) => `
+        <div class="slot">
+          <div class="time">${esc(r.hora)}</div>
+          <div class="grow"><div class="row-title">${esc(fmtDateLong(r.fecha.slice(0, 10)))}</div>
+            <div class="sub">${esc(r.tipo)} · ${r.duracion} min · ${esc(r.sede)}</div></div>
+          ${estadoBadge(r.estado)}
+        </div>`).join("")}
+    </div>` : ""}
+
     ${esStaff() ? `
-    <div class="block">
-      <form class="card" data-action="generar-horarios" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
+    <details class="card panel" style="margin-top:26px;">
+      <summary style="cursor:pointer;font-family:var(--display);font-weight:600;font-size:.85rem;letter-spacing:.02em;text-transform:uppercase;color:var(--ink);">
+        Generar horarios fijos de la semana
+      </summary>
+      <form data-action="generar-horarios" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:18px;">
         <div class="field" style="margin:0;min-width:180px;">
-          <label>Generar horarios fijos</label>
+          <label>Sede</label>
           <select name="sede">${Store.SEDES.map((s) => `<option>${s}</option>`).join("")}</select>
         </div>
         <button class="btn btn-ghost btn-sm" type="submit">${icon("i-calendar")} Martes/miércoles/viernes 7–10pm</button>
       </form>
-      <p style="font-size:.76rem;color:var(--muted);margin:-6px 0 14px;">
+      <p style="font-size:.76rem;color:var(--muted);margin-top:12px;">
         Crea huecos disponibles para los próximos martes, miércoles y viernes a las 19:00, 20:00, 21:00 y 22:00 en la sede elegida.
       </p>
-      <details class="card panel">
-        <summary style="cursor:pointer;font-family:var(--display);font-weight:600;font-size:.85rem;letter-spacing:.02em;text-transform:uppercase;color:var(--ink);">
-          + Abrir hueco disponible
-        </summary>
-        <form data-action="add-slot" style="margin-top:18px;">
-          <div class="field-row">
-            <div class="field"><label>Fecha</label><input type="date" name="fecha" required /></div>
-            <div class="field"><label>Hora</label><input type="time" name="hora" required /></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>Tipo</label>
-              <select name="tipo">${TIPOS_SLOT.map((t) => `<option value="${t.tipo}">${t.tipo} · ${t.duracion} min</option>`).join("")}</select>
-            </div>
-            <div class="field"><label>Sede</label>
-              <select name="sede">${SEDES_AGENDA.map((s) => `<option>${s}</option>`).join("")}</select>
-            </div>
-          </div>
-          <button class="btn btn-primary btn-sm" type="submit">Abrir hueco</button>
-        </form>
-      </details>
-    </div>` : `
-    <p style="font-size:.86rem;color:var(--muted);margin-bottom:18px;max-width:60ch;">
-      Tus entrenamientos del mes. Toca un día para ver el detalle. Para reservar otra sesión, escríbele a tu profe.
-    </p>`}
-
-    ${CalendarioAgenda(byDay)}
-
-    <div class="block-head" style="margin-top:22px;">
-      <h3>${ctxAgenda.dia ? esc(fmtDateLong(ctxAgenda.dia)) : "Sesiones del mes"}</h3>
-      ${ctxAgenda.dia ? `<button type="button" class="link" data-action="agenda-dia" data-dia="">Ver todo el mes</button>` : ""}
-    </div>
-
-    ${days.length ? days.map((day) => `
-      <div class="agenda-day">
-        <h4>${fmtDateLong(day)}</h4>
-        ${byDay[day].sort((a, b) => a.hora.localeCompare(b.hora)).map(slotRow).join("")}
-      </div>
-    `).join("") : `<div class="empty">${ctxAgenda.dia ? "No hay sesiones este día." : "No hay sesiones este mes."}</div>`}
+    </details>` : ""}
   `;
 }
 
@@ -1883,7 +1927,7 @@ function slotRow(r) {
     <div class="slot">
       <div class="time">${esc(r.hora)}</div>
       <div class="grow">
-        <div class="row-title">${alumno ? esc(alumno.nombre) : esc(r.tipo)}</div>
+        <div class="row-title">${alumno ? esc(alumno.nombre) : disponible ? "Hueco disponible" : esc(r.tipo)}</div>
         <div class="sub">${esc(r.tipo)} · ${r.duracion} min · ${esc(r.sede)}</div>
       </div>
       ${disponible && esStaff() ? `
@@ -1895,6 +1939,7 @@ function slotRow(r) {
           <button class="btn btn-primary btn-sm" type="submit">Reservar</button>
         </form>
       ` : estadoBadge(r.estado)}
+      ${esStaff() ? `<button type="button" class="link link-crit slot-borrar" data-action="borrar-clase" data-id="${r.id}" data-nombre="${esc(alumno?.nombre || "")}">Eliminar</button>` : ""}
     </div>`;
 }
 
@@ -2884,10 +2929,20 @@ view.addEventListener("submit", async (e) => {
       const tipoInfo = TIPOS_SLOT.find((t) => t.tipo === data.tipo);
       await Store.addReserva({ alumnoId: null, fecha: data.fecha, hora: data.hora, tipo: data.tipo, duracion: tipoInfo?.duracion || 60, sede: data.sede, estado: "disponible" });
       toast("Hueco agregado a la agenda");
+    } else if (action === "add-clase-dia") {
+      const tipoInfo = TIPOS_SLOT.find((t) => t.tipo === data.tipo);
+      const id = await Store.addReserva({
+        alumnoId: data.alumnoId || null, fecha: ctxAgenda.dia, hora: data.hora, tipo: data.tipo,
+        duracion: tipoInfo?.duracion || 60, sede: data.sede, estado: data.alumnoId ? "confirmada" : "disponible",
+      });
+      ctxAgenda.agregando = false;
+      if (data.alumnoId) avisarClaseNueva(id);
+      toast(data.alumnoId ? "Clase agendada — se le avisó al alumno" : "Hueco agregado a la agenda");
     } else if (action === "reservar-slot") {
       if (!data.alumnoId) return;
       await Store.reservar(form.dataset.id, data.alumnoId);
-      toast("Sesión reservada");
+      avisarClaseNueva(form.dataset.id);
+      toast("Sesión reservada — se le avisó al alumno");
     } else if (action === "add-solicitud") {
       await Store.addSolicitud({ nombre: data.nombre.trim(), edad: Number(data.edad), telefono: data.telefono.trim(), pais: data.pais.trim(), zona: data.zona.trim(), sede: data.sede, mensaje: data.mensaje?.trim() || "" });
       toast("Solicitud enviada");
@@ -2978,13 +3033,37 @@ view.addEventListener("click", async (e) => {
       const [anio, mes] = ctxAgenda.mes.split("-").map(Number);
       const otro = new Date(anio, mes - 1 + Number(agendaMes.dataset.delta), 1);
       ctxAgenda.mes = toYMD(otro).slice(0, 7);
-      ctxAgenda.dia = null;
+      // al cambiar de mes queda tocado "hoy" si cae en ese mes; si no, el día 1
+      const hoy = toYMD(new Date());
+      ctxAgenda.dia = hoy.startsWith(ctxAgenda.mes) ? hoy : `${ctxAgenda.mes}-01`;
+      ctxAgenda.agregando = false;
       return void render();
     }
     const agendaDia = e.target.closest("[data-action='agenda-dia']");
     if (agendaDia) {
-      // tocar el mismo día otra vez lo suelta (vuelve a "todo el mes")
-      ctxAgenda.dia = agendaDia.dataset.dia && agendaDia.dataset.dia !== ctxAgenda.dia ? agendaDia.dataset.dia : null;
+      ctxAgenda.dia = agendaDia.dataset.dia;
+      ctxAgenda.agregando = false;
+      render();
+      // en el teléfono el detalle queda debajo del calendario: acercarlo
+      document.querySelector(".cal-detalle")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return;
+    }
+    if (e.target.closest("[data-action='agenda-hoy']")) {
+      ctxAgenda.dia = toYMD(new Date());
+      ctxAgenda.mes = ctxAgenda.dia.slice(0, 7);
+      ctxAgenda.agregando = false;
+      return void render();
+    }
+    if (e.target.closest("[data-action='agenda-agregar']")) {
+      ctxAgenda.agregando = !ctxAgenda.agregando;
+      return void render();
+    }
+    const borrarClase = e.target.closest("[data-action='borrar-clase']");
+    if (borrarClase) {
+      const de = borrarClase.dataset.nombre;
+      if (!confirm(de ? `¿Eliminar la clase de ${de}? Se borra de su agenda.` : "¿Eliminar este hueco de la agenda?")) return;
+      await Store.borrarReserva(borrarClase.dataset.id);
+      toast("Clase eliminada");
       return void render();
     }
 

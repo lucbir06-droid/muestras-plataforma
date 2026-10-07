@@ -132,6 +132,31 @@ Deno.serve(async () => {
       }
     }
 
+    // ---- recordatorio: "mañana tienes clase" ----
+    // "mañana" según la hora de México (esta función corre en UTC)
+    const hoyMx = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+    const manana = new Date(`${hoyMx}T12:00:00Z`);
+    manana.setUTCDate(manana.getUTCDate() + 1);
+    const mananaYMD = manana.toISOString().slice(0, 10);
+    const { data: clases } = await supabase.from("reservas")
+      .select("id, alumno_id, hora, tipo, sede")
+      .eq("fecha", mananaYMD).eq("estado", "confirmada").eq("recordado", false).not("alumno_id", "is", null);
+    let recordatorios = 0;
+    for (const c of clases || []) {
+      // se marca antes de avisar: si algo falla, mejor un aviso menos que dos iguales
+      const { error: eMarca } = await supabase.from("reservas").update({ recordado: true }).eq("id", c.id);
+      if (eMarca) continue;
+      await fetch(`${SUPABASE_URL}/functions/v1/enviar-push`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "alumno", alumnoId: c.alumno_id, ruta: "/agenda",
+          titulo: `Mañana tienes clase a las ${c.hora}`,
+          cuerpo: `${c.tipo || "Clase"}${c.sede ? " en " + c.sede : ""}. ¡Te esperamos!`,
+        }),
+      }).then(() => { recordatorios++; }).catch((err) => console.warn("No se pudo recordar la clase", c.id, err));
+    }
+
     if (lineas.length) {
       await enviarCorreo(
         TO_MILLAN,
@@ -140,7 +165,7 @@ Deno.serve(async () => {
       );
     }
 
-    return new Response(JSON.stringify({ success: true, revisados: (alumnos || []).length, avisos: lineas.length }), {
+    return new Response(JSON.stringify({ success: true, revisados: (alumnos || []).length, avisos: lineas.length, recordatorios }), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {

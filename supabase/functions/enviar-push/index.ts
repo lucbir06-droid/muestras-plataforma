@@ -177,6 +177,21 @@ Deno.serve(async (req) => {
     // llamada desde el panel: solo puede avisar de SU último mensaje
     const { data: { user } } = await admin.auth.getUser(bearer);
     if (!user) return responder({ success: false, message: "Necesitas iniciar sesión" }, 401);
+    // el staff agendó una clase: avisarle a la familia de ese alumno
+    if (body.tipo === "clase") {
+      const { data: quien } = await admin.from("perfiles").select("rol").eq("id", user.id).maybeSingle();
+      if (quien?.rol !== "dueño" && quien?.rol !== "profe") return responder({ success: false, message: "Solo el staff agenda clases" }, 403);
+      const { data: r } = await admin.from("reservas").select("alumno_id, fecha, hora, tipo, sede").eq("id", body.reservaId).maybeSingle();
+      if (!r?.alumno_id) return responder({ success: true, enviados: 0, fallidos: 0 });
+      const { data: vinculos } = await admin.from("alumno_usuarios").select("user_id").eq("alumno_id", r.alumno_id);
+      const cuando = new Date(`${r.fecha}T12:00:00`).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+      const res = await enviarA((vinculos || []).map((v) => v.user_id), {
+        titulo: "Nueva clase agendada",
+        cuerpo: `${cuando}, ${r.hora} · ${r.tipo || "Clase"}${r.sede ? " en " + r.sede : ""}`,
+        ruta: "/agenda",
+      });
+      return responder({ success: true, ...res });
+    }
     if (body.tipo !== "mensaje") throw new Error("Tipo de aviso no válido");
     const destino = await avisoDeMensaje(user.id);
     if (!destino) return responder({ success: true, enviados: 0, fallidos: 0 });

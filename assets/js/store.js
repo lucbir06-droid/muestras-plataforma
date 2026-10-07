@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=39";
+import { sb } from "./supabase-client.js?v=40";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -305,7 +305,13 @@ export const Store = {
     return C.reservas.slice().sort((a, b) => new Date(a.fecha.slice(0, 10) + "T" + a.hora) - new Date(b.fecha.slice(0, 10) + "T" + b.hora));
   },
   async addReserva({ alumnoId = null, fecha, hora, tipo, duracion, sede, estado = "confirmada" }) {
-    await insertar("reservas", { alumno_id: alumnoId, fecha: aYMD(fecha), hora, tipo, duracion, sede, estado });
+    const filas = await insertar("reservas", { alumno_id: alumnoId, fecha: aYMD(fecha), hora, tipo, duracion, sede, estado });
+    await cargar("reservas");
+    return filas?.[0]?.id || null;
+  },
+  async borrarReserva(id) {
+    const { error } = await sb.from("reservas").delete().eq("id", id);
+    if (error) throw error;
     await cargar("reservas");
   },
   async reservar(id, alumnoId) {
