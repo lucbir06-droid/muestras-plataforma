@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=38";
+import { sb } from "./supabase-client.js?v=39";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -108,6 +108,7 @@ const mapAsistencia = (r) => ({
 const mapEvidencia = (r) => ({
   id: r.id, alumnoId: r.alumno_id, alumnoNombre: r.alumno_nombre, tipo: r.tipo, comentario: r.comentario,
   fotoUrl: urlFoto("evidencias", r.foto_path), fecha: r.fecha,
+  feedback: r.feedback, feedbackAutor: r.feedback_autor,
 });
 const mapSolicitud = (r) => ({
   id: r.id, nombre: r.nombre, edad: r.edad, telefono: r.telefono, pais: r.pais, zona: r.zona, sede: r.sede,
@@ -119,7 +120,10 @@ const mapInscripcion = (r) => ({
   tallaPlayera: r.talla_playera, estado: r.estado, fecha: r.fecha,
 });
 const mapObjetivo = (r) => ({ id: r.id, categoria: r.categoria, profe: r.profe, titulo: r.titulo, detalle: r.detalle, fecha: r.fecha });
-const mapPerfil = (r) => ({ id: r.id, nombre: r.nombre, telefono: r.telefono, pais: r.pais, rol: r.rol, rolSolicitado: r.rol_solicitado });
+const mapPerfil = (r) => ({
+  id: r.id, nombre: r.nombre, telefono: r.telefono, pais: r.pais, rol: r.rol, rolSolicitado: r.rol_solicitado,
+  bio: r.bio || "", fotoUrl: urlFoto("avatares", r.foto_path),
+});
 const mapMensaje = (r) => ({
   id: r.id, tipo: r.tipo, sede: r.sede, categoria: r.categoria, profeId: r.profe_id, alumnoId: r.alumno_id,
   autorId: r.autor_id, autorNombre: r.autor_nombre, autorRol: r.autor_rol, contenido: r.contenido, fecha: r.creado_en,
@@ -392,6 +396,21 @@ export const Store = {
     await cargar("inscripciones");
   },
 
+  /* ---- mi perfil (foto y bio) ---- */
+  async guardarPerfil(userId, { bio, fotoBlob }) {
+    const patch = { bio: bio || null };
+    if (fotoBlob) {
+      // nombre nuevo cada vez: así el navegador no se queda con la foto vieja
+      patch.foto_path = `${userId}-${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from("avatares").upload(patch.foto_path, fotoBlob, { contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+    }
+    const { data, error } = await sb.from("perfiles").update(patch).eq("id", userId).select().maybeSingle();
+    if (error) throw error;
+    await cargar("perfiles");
+    return data ? mapPerfil(data) : null;
+  },
+
   /* ---- pagos ---- */
   pagos() { return C.pagos.slice().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); },
   async addPago(e) {
@@ -460,6 +479,13 @@ export const Store = {
   /* ---- evidencias (pruebas que sube el alumno: gym, comidas, etc.) ---- */
   evidencias() { return C.evidencias; },
   evidenciasDe(alumnoId) { return C.evidencias.filter((e) => e.alumnoId === alumnoId); },
+  // el comentario del profe sobre un hábito que subió el alumno
+  async comentarEvidencia(id, feedback, autor) {
+    const { error } = await sb.from("evidencias")
+      .update({ feedback, feedback_autor: autor, feedback_fecha: new Date().toISOString() }).eq("id", id);
+    if (error) throw error;
+    await cargar("evidencias");
+  },
   async addEvidencia({ alumnoId, alumnoNombre, tipo, comentario, fotoBlob }) {
     let fotoPath = null;
     if (fotoBlob) {

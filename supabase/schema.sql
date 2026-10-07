@@ -487,6 +487,18 @@ insert into storage.buckets (id, name, public) values ('evidencias', 'evidencias
   on conflict (id) do update set public = true;
 insert into storage.buckets (id, name, public) values ('checkins', 'checkins', true)
   on conflict (id) do update set public = true;
+-- fotos de perfil
+insert into storage.buckets (id, name, public) values ('avatares', 'avatares', true)
+  on conflict (id) do update set public = true;
+
+-- perfil personalizable: foto y una bio corta (Mi cuenta)
+alter table public.perfiles add column if not exists bio text;
+alter table public.perfiles add column if not exists foto_path text;
+
+-- comentario del profe sobre cada hábito que sube el alumno
+alter table public.evidencias add column if not exists feedback text;
+alter table public.evidencias add column if not exists feedback_autor text;
+alter table public.evidencias add column if not exists feedback_fecha timestamptz;
 
 -- ---------------------------------------------------------------
 -- 5. PERMISOS (Row Level Security)
@@ -643,6 +655,9 @@ create policy "evidencias crear" on public.evidencias for insert to authenticate
   with check (user_id = auth.uid() and (alumno_id is null or public.puede_ver_alumno(alumno_id)));
 create policy "evidencias borrar" on public.evidencias for delete to authenticated
   using (public.es_staff());
+-- el staff le deja su comentario a un hábito
+create policy "evidencias comentar" on public.evidencias for update to authenticated
+  using (public.es_staff()) with check (public.es_staff());
 
 -- chat: los canales por categoría los ve y escribe el staff (todos) o un
 -- alumno/papá que tenga un alumno propio en esa sede+división exacta —
@@ -680,7 +695,7 @@ create policy "recordatorios dueno" on public.recordatorios_enviados for all to 
 drop policy if exists "logueado sube evidencias" on storage.objects;
 drop policy if exists "logueado sube fotos" on storage.objects;
 create policy "logueado sube fotos" on storage.objects for insert to authenticated
-  with check (bucket_id in ('evidencias', 'checkins'));
+  with check (bucket_id in ('evidencias', 'checkins', 'avatares'));
 
 -- ---------------------------------------------------------------
 -- NOTIFICACIONES PUSH — teléfonos donde cada cuenta tiene la app

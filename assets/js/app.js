@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=38";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=38";
-import { sb } from "./supabase-client.js?v=38";
+import { Store, toYMD } from "./store.js?v=39";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=39";
+import { sb } from "./supabase-client.js?v=39";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=38";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=38" en los imports de arriba son para que el navegador de
+   Los "?v=39" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=38" en el proyecto (app/index.html, store.js e
+   aparezca "?v=39" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -53,7 +53,8 @@ const NAV = [
   { path: "/evidencias", label: "Hábitos", icon: "i-task", roles: TODOS },
   { path: "/alumnos", label: "Alumnos", icon: "i-users", roles: STAFF },
   { path: "/agenda", label: "Agenda", icon: "i-calendar", roles: TODOS },
-  { path: "/clases-prueba", label: "Clases de prueba", icon: "i-play", roles: TODOS, countKey: "solicitudesPendientes" },
+  // solo los dueños confirman clases de prueba: a los profes no les sirve
+  { path: "/clases-prueba", label: "Clases de prueba", icon: "i-play", roles: ["dueño", "alumno"], countKey: "solicitudesPendientes" },
   { path: "/inscribirse", label: "Inscripciones", labelAlumno: "Inscribirme", icon: "i-check", roles: ["dueño", "alumno"], countKey: "inscripcionesPendientes" },
   { path: "/profes", label: "Objetivos de profes", icon: "i-target", roles: TODOS },
   { path: "/reportes", label: "Reportes", icon: "i-chart", roles: TODOS },
@@ -70,6 +71,27 @@ const TABS_POR_ROL = {
   "profe": ["/", "/checkin", "/asistencia", "/chat"],
   "dueño": ["/", "/alumnos", "/pagos", "/chat"],
 };
+
+// La clase de prueba se usa una sola vez: ya confirmada, no hay más que
+// hacer en esa sección y lo que sigue es inscribirse a un plan.
+function clasePruebaUsada() {
+  return esAlumno() && Store.solicitudes().some((s) => s.userId === perfil?.id && s.estado === "confirmada");
+}
+function navVisible(item) {
+  if (!item.roles.includes(rol())) return false;
+  if (item.path === "/clases-prueba" && clasePruebaUsada()) return false;
+  return true;
+}
+
+// Los alumnos "de" quien está viendo: el dueño ve a todos, el profe solo a
+// los que tiene asignados, y el papá/alumno a los ligados a su cuenta.
+// (Asistencia y check-out NO usan esto: ahí se pasa lista a toda la sede,
+// porque varios profes entrenan al mismo grupo.)
+function misAlumnos() {
+  if (esAlumno()) return Store.alumnos();
+  const activos = Store.alumnosActivos();
+  return esDueno() ? activos : activos.filter((a) => a.coachId === perfil?.id);
+}
 
 function itemDeRuta(path) {
   return NAV.find((n) => n.path === path || (n.path === "/inscribirse" && path.startsWith("/inscribirse")));
@@ -282,6 +304,8 @@ function render() {
 
   pageTitle.textContent = title;
   view.innerHTML = html;
+  const topAvatar = document.getElementById("topAvatar");
+  if (topAvatar) { topAvatar.innerHTML = avatarPerfil(perfil); topAvatar.hidden = false; }
   // la entrada animada y el volver arriba solo al cambiar de sección: el
   // chat se redibuja cada pocos segundos y no debe parpadear ni saltar
   if (path !== ultimaRuta) {
@@ -322,14 +346,14 @@ function detenerPollChat() {
 
 function renderNav(path) {
   const counts = {
-    solicitudesPendientes: esStaff() ? Store.solicitudes().filter((s) => s.estado === "pendiente").length : 0,
+    solicitudesPendientes: esDueno() ? Store.solicitudes().filter((s) => s.estado === "pendiente").length : 0,
     pagosPendientes: esDueno() ? Store.pagos().filter((p) => p.estado === "pendiente").length : 0,
     checkinsError: Store.checkins().filter((c) => c.estado === "error").length,
     inscripcionesPendientes: esDueno() ? Store.inscripciones().filter((i) => i.estado === "pendiente de pago").length : 0,
     profesPendientes: esDueno() ? Store.profesPendientes().length : 0,
   };
   sidenav.innerHTML = NAV
-    .filter((item) => item.roles.includes(rol()))
+    .filter(navVisible)
     .map((item) => {
       const on = path === item.path || path.startsWith(item.path + "/") || (item.path === "/inscribirse" && path.startsWith("/inscribirse"));
       const count = item.countKey ? counts[item.countKey] : 0;
@@ -340,7 +364,7 @@ function renderNav(path) {
   // teléfono: barra de pestañas + hoja "Más"
   const activa = (item) => path === item.path || path.startsWith(item.path + "/") || (item.path === "/inscribirse" && path.startsWith("/inscribirse"));
   const etiqueta = (item, corta) => (corta && item.corto) || (esAlumno() && item.labelAlumno) || item.label;
-  const mias = NAV.filter((item) => item.roles.includes(rol()));
+  const mias = NAV.filter(navVisible);
   const principales = (TABS_POR_ROL[rol()] || TABS_POR_ROL.alumno).map((p) => mias.find((i) => i.path === p)).filter(Boolean);
   const resto = mias.filter((i) => !principales.includes(i));
   const enResto = resto.some(activa);
@@ -371,6 +395,8 @@ navSheet.addEventListener("click", (e) => {
 document.getElementById("logoutBtnSheet").addEventListener("click", () => { abrirSheet(false); cerrarSesion(); });
 // sin sesión (login/registro) no hay menú
 function ocultarNav() {
+  const topAvatar = document.getElementById("topAvatar");
+  if (topAvatar) topAvatar.hidden = true;
   tabbar.innerHTML = "";
   abrirSheet(false);
 }
@@ -388,8 +414,11 @@ async function cargarPerfil() {
   if (miPedido !== perfilPedidoId) return; // llegó tarde: ya hay una cuenta más nueva cargando/cargada
   perfilError = !!error || !data;
   perfil = data
-    ? { id: data.id, nombre: data.nombre, rol: data.rol, rolSolicitado: data.rol_solicitado }
-    : { id: usuario, nombre: session.user.email, rol: "alumno", rolSolicitado: null };
+    ? {
+      id: data.id, nombre: data.nombre, rol: data.rol, rolSolicitado: data.rol_solicitado, bio: data.bio || "",
+      fotoUrl: data.foto_path ? sb.storage.from("avatares").getPublicUrl(data.foto_path).data.publicUrl : null,
+    }
+    : { id: usuario, nombre: session.user.email, rol: "alumno", rolSolicitado: null, bio: "", fotoUrl: null };
 }
 
 function AuthShell(mode, inner) {
@@ -760,7 +789,7 @@ document.addEventListener("visibilitychange", () => {
 /* ---------------- panel: dueño / profe ---------------- */
 
 function Dashboard() {
-  const alumnos = esStaff() ? Store.alumnosActivos() : Store.alumnos();
+  const alumnos = misAlumnos();
   const reservas = Store.reservas();
   const solicitudes = Store.solicitudes();
   const pagos = Store.pagos();
@@ -782,7 +811,7 @@ function Dashboard() {
       <div class="card stat"><span class="n">${alumnos.length}</span><span class="l">${esDueno() ? "Alumnos activos" : "Mis alumnos"}</span></div>
       <div class="card stat"><span class="n">${sesionesSemana}</span><span class="l">Sesiones esta semana</span></div>
       <div class="card stat"><span class="n">${asistieronHoy}</span><span class="l">Asistieron hoy</span></div>
-      <div class="card stat"><span class="n">${solicitudes.filter((s) => s.estado === "pendiente").length}</span><span class="l">Solicitudes pendientes</span></div>
+      ${esDueno() ? `<div class="card stat"><span class="n">${solicitudes.filter((s) => s.estado === "pendiente").length}</span><span class="l">Solicitudes pendientes</span></div>` : ""}
       ${esDueno() ? `<div class="card stat"><span class="n">${pagos.filter((p) => p.estado === "pendiente").length}</span><span class="l">Pagos pendientes</span></div>` : ""}
     </div>
 
@@ -793,12 +822,13 @@ function Dashboard() {
       </div>
     </div>
 
+    ${esDueno() ? `
     <div class="block">
       <div class="block-head"><h3>Solicitudes de clase de prueba</h3><a href="#/clases-prueba">Ver todas →</a></div>
       <div class="list">
         ${pendientes.length ? pendientes.map(solicitudRow).join("") : `<div class="empty">No hay solicitudes pendientes.</div>`}
       </div>
-    </div>
+    </div>` : ""}
 
     <div class="block">
       <div class="block-head"><h3>${esDueno() ? "Alumnos recientes" : "Mis alumnos"}</h3><a href="#/alumnos">Ver todos →</a></div>
@@ -881,7 +911,7 @@ function PanelAlumno() {
   if (!alumnos.length) return errorPerfil + aviso + AlumnoSinAlumno();
   return errorPerfil + aviso + alumnos.map(resumenAlumno).join("") + `
     <div class="block"><p style="font-size:.8rem;color:var(--muted);">¿Tienes otro hijo en la academia?</p>
-      <a class="btn btn-ghost btn-sm" style="margin-top:10px;" href="#/clases-prueba">Pedir su clase de prueba</a></div>`;
+      <a class="btn btn-ghost btn-sm" style="margin-top:10px;" href="#/clases-prueba?otro=1">Pedir su clase de prueba</a></div>`;
 }
 
 function resumenAlumno(a) {
@@ -1291,7 +1321,9 @@ function Evidencias() {
 
   if (esAlumno() && !alumnos.some((a) => a.habitosPremium)) return HabitosUpsell(evidencias);
 
-  const alumnosPremium = esStaff() ? Store.alumnosActivos().filter((a) => a.habitosPremium) : alumnos;
+  if (esStaff()) return HabitosStaff();
+
+  const alumnosPremium = alumnos;
   return `
     <div class="block">
       <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
@@ -1319,6 +1351,47 @@ function Evidencias() {
       </div>
     </div>
   `;
+}
+
+// Hábitos para el staff: no suben ni pagan nada. Ven qué alumnos suyos
+// tienen Hábitos Premium, lo que cada uno fue subiendo, y le dejan su
+// comentario a cada registro (el alumno lo ve en su lista).
+function HabitosStaff() {
+  const conPlan = misAlumnos().filter((a) => a.habitosPremium);
+  const ids = new Set(misAlumnos().map((a) => a.id));
+  const evidencias = Store.evidencias().filter((e) => esDueno() || ids.has(e.alumnoId));
+  const sinRevisar = evidencias.filter((e) => !e.feedback).length;
+  return `
+    <div class="block">
+      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:62ch;">
+        Hábitos Premium es un extra que contratan los alumnos; a ti no te cuesta nada.
+        Aquí ves quiénes de ${esDueno() ? "la academia" : "tus alumnos"} lo tienen y lo que van subiendo de
+        <b>entrenamiento</b>, <b>recuperación</b> y <b>nutrición</b>, para que les dejes tu comentario.
+      </p>
+      <div class="stats">
+        <div class="card stat"><span class="n">${conPlan.length}</span><span class="l">Alumnos con Hábitos Premium</span></div>
+        <div class="card stat"><span class="n">${sinRevisar}</span><span class="l">Registros sin comentar</span></div>
+      </div>
+      ${conPlan.length ? `
+      <div class="list">
+        ${conPlan.map((a) => {
+          const suyos = evidencias.filter((e) => e.alumnoId === a.id);
+          return `<a class="row-card" href="#/alumnos/${a.id}">
+            <div class="avatar-sm">${esc(a.avatar)}</div>
+            <div class="grow"><div class="row-title">${esc(a.nombre)}</div>
+              <div class="row-sub">${suyos.length ? `${suyos.length} registro${suyos.length > 1 ? "s" : ""} · último ${fmtDate(suyos[0].fecha)}` : "Todavía no sube nada"}</div></div>
+            ${badge("Premium", "ok")}
+          </a>`;
+        }).join("")}
+      </div>` : `<div class="empty">${esDueno() ? "Todavía no hay alumnos con Hábitos Premium activo." : "Ninguno de tus alumnos tiene Hábitos Premium activo todavía."}</div>`}
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Lo que han subido</h3></div>
+      <div class="list">
+        ${evidencias.length ? evidencias.map(evidenciaRow).join("") : `<div class="empty">Todavía no hay registros.</div>`}
+      </div>
+    </div>`;
 }
 
 // Dentro de la app de iPhone no se muestra ni el precio ni el botón de pago
@@ -1368,6 +1441,12 @@ function evidenciaRow(e) {
         <div class="row-title">${esc(e.alumnoNombre)}</div>
         ${e.comentario ? `<div class="row-sub" style="margin-top:2px;">${esc(e.comentario)}</div>` : ""}
         <div class="row-sub" style="margin-top:2px;">${fmtDate(e.fecha)}</div>
+        ${e.feedback ? `<div class="habito-feedback"><b>${esc(e.feedbackAutor || "Tu profe")}:</b> ${esc(e.feedback)}</div>` : ""}
+        ${esStaff() ? `
+        <form data-action="comentar-habito" data-id="${e.id}" class="habito-comentar">
+          <input name="feedback" required autocomplete="off" placeholder="${e.feedback ? "Cambiar tu comentario…" : "Déjale tu comentario…"}" />
+          <button class="btn btn-ghost btn-sm" type="submit">${e.feedback ? "Actualizar" : "Comentar"}</button>
+        </form>` : ""}
       </div>
       ${badge(e.tipo, tipoKind)}
     </div>`;
@@ -1395,7 +1474,7 @@ async function handleEvidencia(form) {
 /* ---------------- alumnos ---------------- */
 
 function AlumnosList() {
-  const alumnos = Store.alumnosActivos();
+  const alumnos = misAlumnos();
   const coaches = Store.coaches();
   const deBaja = esDueno() ? Store.alumnosDeBaja() : [];
   return `
@@ -1499,6 +1578,10 @@ function alumnosPorSede(sede, alumnos) {
 function AlumnoDetail(id) {
   const a = Store.alumno(id);
   if (!a) return `<div class="empty">No encontramos este alumno. <a href="#/${esStaff() ? "alumnos" : ""}" style="color:var(--accent-2)">Volver</a>.</div>`;
+  // un profe solo abre la ficha de sus alumnos asignados
+  if (rol() === "profe" && a.coachId !== perfil.id) {
+    return `<div class="empty">${esc(a.nombre)} no está asignado a ti. <a href="#/alumnos" style="color:var(--accent-2)">Ver mis alumnos</a>.</div>`;
+  }
 
   const staff = esStaff();
   const bitacora = Store.bitacoraDe(id);
@@ -1691,6 +1774,44 @@ function AlumnoDetail(id) {
 
 /* ---------------- agenda ---------------- */
 
+// qué mes se está viendo y qué día está tocado (null = todo el mes)
+const ctxAgenda = { mes: toYMD(new Date()).slice(0, 7), dia: null };
+
+// calendario del mes: cada día con sesiones lleva sus puntos (verde =
+// confirmada, gris = hueco disponible) y se puede tocar para ver su detalle
+function CalendarioAgenda(byDay) {
+  const [anio, mes] = ctxAgenda.mes.split("-").map(Number);
+  const primero = new Date(anio, mes - 1, 1);
+  const diasDelMes = new Date(anio, mes, 0).getDate();
+  const huecos = (primero.getDay() + 6) % 7; // la semana empieza en lunes
+  const hoy = toYMD(new Date());
+  const titulo = primero.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  const celdas = [];
+  for (let i = 0; i < huecos; i++) celdas.push(`<span class="cal-dia vacio"></span>`);
+  for (let d = 1; d <= diasDelMes; d++) {
+    const key = `${ctxAgenda.mes}-${String(d).padStart(2, "0")}`;
+    const sesiones = byDay[key] || [];
+    const confirmadas = sesiones.filter((r) => r.estado !== "disponible").length;
+    const libres = sesiones.length - confirmadas;
+    const clases = ["cal-dia", key === hoy ? "hoy" : "", key === ctxAgenda.dia ? "sel" : "", sesiones.length ? "con" : ""].join(" ");
+    celdas.push(`<button type="button" class="${clases}" data-action="agenda-dia" data-dia="${key}" aria-label="${fmtDateLong(key)}${sesiones.length ? `, ${sesiones.length} sesiones` : ""}">
+      <b>${d}</b>
+      <i>${"<u></u>".repeat(Math.min(confirmadas, 3))}${"<u class='libre'></u>".repeat(Math.min(libres, 3 - Math.min(confirmadas, 3)))}</i>
+    </button>`);
+  }
+  return `
+    <div class="card calendario">
+      <div class="cal-cabecera">
+        <button type="button" class="cal-nav" data-action="agenda-mes" data-delta="-1" aria-label="Mes anterior">‹</button>
+        <h3>${esc(titulo)}</h3>
+        <button type="button" class="cal-nav" data-action="agenda-mes" data-delta="1" aria-label="Mes siguiente">›</button>
+      </div>
+      <div class="cal-semana"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+      <div class="cal-grid">${celdas.join("")}</div>
+      <div class="cal-leyenda"><span><u></u> Sesión confirmada</span>${esStaff() ? `<span><u class="libre"></u> Hueco disponible</span>` : ""}</div>
+    </div>`;
+}
+
 function Agenda() {
   const reservas = Store.reservas();
   const byDay = {};
@@ -1698,7 +1819,8 @@ function Agenda() {
     const key = r.fecha.slice(0, 10);
     (byDay[key] ||= []).push(r);
   });
-  const days = Object.keys(byDay).sort();
+  // debajo del calendario: el día tocado, o todo lo del mes que se está viendo
+  const days = Object.keys(byDay).sort().filter((d) => (ctxAgenda.dia ? d === ctxAgenda.dia : d.startsWith(ctxAgenda.mes)));
 
   return `
     ${esStaff() ? `
@@ -1735,15 +1857,22 @@ function Agenda() {
       </details>
     </div>` : `
     <p style="font-size:.86rem;color:var(--muted);margin-bottom:18px;max-width:60ch;">
-      Estas son tus sesiones agendadas. Para reservar otra, escríbele a tu profe o pide una clase de prueba.
+      Tus entrenamientos del mes. Toca un día para ver el detalle. Para reservar otra sesión, escríbele a tu profe.
     </p>`}
+
+    ${CalendarioAgenda(byDay)}
+
+    <div class="block-head" style="margin-top:22px;">
+      <h3>${ctxAgenda.dia ? esc(fmtDateLong(ctxAgenda.dia)) : "Sesiones del mes"}</h3>
+      ${ctxAgenda.dia ? `<button type="button" class="link" data-action="agenda-dia" data-dia="">Ver todo el mes</button>` : ""}
+    </div>
 
     ${days.length ? days.map((day) => `
       <div class="agenda-day">
         <h4>${fmtDateLong(day)}</h4>
         ${byDay[day].sort((a, b) => a.hora.localeCompare(b.hora)).map(slotRow).join("")}
       </div>
-    `).join("") : `<div class="empty">No hay sesiones en la agenda todavía.</div>`}
+    `).join("") : `<div class="empty">${ctxAgenda.dia ? "No hay sesiones este día." : "No hay sesiones este mes."}</div>`}
   `;
 }
 
@@ -1827,8 +1956,25 @@ function AlumnoSinAlumno() {
 function ClasesPrueba() {
   const solicitudes = Store.solicitudes();
   const staff = esStaff();
+  // ya la usó: lo que sigue es inscribirse. El formulario solo vuelve a
+  // aparecer si la pide para otro hijo (?otro=1, desde su panel).
+  const paraOtro = currentFullPath().includes("otro=1");
+  if (clasePruebaUsada() && !paraOtro) {
+    return `
+      <div class="card" style="max-width:520px;text-align:center;padding:30px 22px;">
+        <div class="hecho-icono">${icon("i-check")}</div>
+        <div class="row-title" style="font-size:1.1rem;margin-bottom:8px;">Ya usaste tu clase de prueba</div>
+        <p style="font-size:.88rem;color:var(--muted);margin-bottom:20px;">
+          La clase de prueba es una sola vez. Para seguir entrenando con nosotros, el siguiente paso es elegir tu plan.
+        </p>
+        <a class="btn btn-primary" href="#/inscribirse" style="width:100%;">Elegir mi plan</a>
+        <p style="font-size:.76rem;color:var(--muted);margin-top:16px;">
+          ¿Es para otro hijo? <a href="#/clases-prueba?otro=1" style="color:var(--accent-2);">Pide su clase de prueba</a>.
+        </p>
+      </div>`;
+  }
   return `
-    ${SolicitudForm("Pedir una clase de prueba", "Llena el formulario y la academia te contacta para confirmar día y hora.")}
+    ${SolicitudForm(paraOtro ? "Clase de prueba para otro hijo" : "Pedir una clase de prueba", "Llena el formulario y la academia te contacta para confirmar día y hora.")}
     <div class="block">
       <div class="block-head"><h3>${staff ? "Solicitudes recibidas" : "Mis solicitudes"}</h3></div>
       <div class="list">
@@ -1858,7 +2004,7 @@ function solicitudFull(s) {
 /* ---------------- reportes ---------------- */
 
 function Reportes() {
-  const alumnos = esStaff() ? Store.alumnosActivos() : Store.alumnos();
+  const alumnos = misAlumnos();
   if (!alumnos.length && esAlumno()) return AlumnoSinAlumno();
   return `
     <div class="list">
@@ -2336,18 +2482,51 @@ function fmtHora(fecha) {
 }
 
 /* ---------------- mi cuenta ---------------- */
+// foto de perfil (o las iniciales si todavía no sube una)
+function avatarPerfil(p, clase = "") {
+  const iniciales = String(p?.nombre || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  return p?.fotoUrl
+    ? `<img class="avatar-foto ${clase}" src="${p.fotoUrl}" alt="" />`
+    : `<div class="avatar-foto avatar-iniciales ${clase}">${esc(iniciales)}</div>`;
+}
+
 function MiCuenta() {
   const rolLabel = { "dueño": "Dueño", "profe": "Profe", "alumno": "Alumno / papá" }[perfil.rol] || perfil.rol;
   return `
     <div class="block" style="max-width:520px;">
-      <div class="card">
-        <div class="row-title">${esc(perfil.nombre)}</div>
-        <div class="row-sub">${esc(session.user.email)} · ${esc(rolLabel)}</div>
+      <div class="card perfil-card">
+        <div class="perfil-cabecera">
+          ${avatarPerfil(perfil, "grande")}
+          <div>
+            <div class="row-title" style="font-size:1.1rem;">${esc(perfil.nombre)}</div>
+            <div class="row-sub">${esc(session.user.email)} · ${esc(rolLabel)}</div>
+          </div>
+        </div>
+        ${perfil.bio ? `<p class="perfil-bio">${esc(perfil.bio)}</p>` : ""}
         <div class="row-actions" style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm ico-linea" type="button" data-action="cerrar-sesion">${icon("i-exit")} Cerrar sesión</button>
           <a class="btn btn-ghost btn-sm" href="https://millanacademy.com/privacidad/" target="_blank" rel="noopener">Aviso de privacidad</a>
         </div>
       </div>
+    </div>
+
+    <div class="block" style="max-width:520px;">
+      <div class="block-head"><h3>Personalizar mi perfil</h3></div>
+      <form class="card" data-action="guardar-perfil">
+        <div class="field">
+          <label>Foto de perfil</label>
+          <label class="perfil-foto-campo">
+            <span class="perfil-foto-vista">${avatarPerfil(perfil, "grande")}</span>
+            <span class="perfil-foto-texto"><b>${perfil.fotoUrl ? "Cambiar foto" : "Subir foto"}</b><small>Toca para elegir una de tu galería o tomarla</small></span>
+            <input name="foto" type="file" accept="image/*" data-foto-perfil />
+          </label>
+        </div>
+        <div class="field">
+          <label>Sobre mí</label>
+          <textarea name="bio" maxlength="280" placeholder="${esStaff() ? "Ej. Entrenador de porteros, ex profesional. Trabajo técnica y juego aéreo." : "Ej. Portero de 1ra División, 14 años. Mi ídolo es…"}">${esc(perfil.bio || "")}</textarea>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit">Guardar perfil</button>
+      </form>
     </div>
 
     ${Store.bloqueados().length ? `
@@ -2447,7 +2626,7 @@ function ChatDMStaff(params) {
   const soyDueno = esDueno();
   const alumnoId = params.get("alumno") || "";
   const profeId = params.get("profe") || (soyDueno ? "" : yo);
-  const alumnos = Store.alumnos();
+  const alumnos = misAlumnos();
   const coaches = Store.coaches();
   const alumno = alumnoId ? Store.alumno(alumnoId) : null;
 
@@ -2600,6 +2779,15 @@ function Chat(fullPath) {
 
 // cambiar sede / fecha / categoría en asistencia y check-out recarga la lista de alumnos
 view.addEventListener("change", (e) => {
+  const fotoPerfil = e.target.closest("input[data-foto-perfil]");
+  if (fotoPerfil) {
+    const archivo = fotoPerfil.files[0];
+    if (archivo) {
+      fotoPerfil.closest(".perfil-foto-campo").querySelector(".perfil-foto-vista").innerHTML =
+        `<img class="avatar-foto grande" src="${URL.createObjectURL(archivo)}" alt="" />`;
+    }
+    return;
+  }
   // tomó (o eligió) una foto: mostrarla en el recuadro
   const foto = e.target.closest("input[data-foto]");
   if (foto) {
@@ -2744,6 +2932,18 @@ view.addEventListener("submit", async (e) => {
       await Store.enviarMensajeDirecto(data.alumnoId, data.profeId, data.contenido.trim(), perfil.id, perfil.nombre, perfil.rol);
       avisarMensajeNuevo();
       form.reset();
+    } else if (action === "guardar-perfil") {
+      const archivo = form.elements.foto.files[0];
+      const boton = form.querySelector("button[type='submit']");
+      boton.disabled = true; boton.textContent = "Guardando…";
+      const fotoBlob = archivo ? await resizeImage(archivo, 640, 0.85) : null;
+      const nuevo = await Store.guardarPerfil(perfil.id, { bio: data.bio.trim(), fotoBlob });
+      perfil.bio = data.bio.trim();
+      if (nuevo?.fotoUrl) perfil.fotoUrl = nuevo.fotoUrl;
+      toast("Perfil actualizado");
+    } else if (action === "comentar-habito") {
+      await Store.comentarEvidencia(form.dataset.id, data.feedback.trim(), perfil.nombre);
+      toast("Comentario guardado");
     } else if (action === "eliminar-cuenta") {
       if (data.confirmacion.trim().toUpperCase() !== "ELIMINAR") { toast("Escribe ELIMINAR para confirmar"); return; }
       if (!confirm("Tu cuenta se elimina para siempre y no se puede recuperar. ¿Continuar?")) return;
@@ -2771,6 +2971,22 @@ view.addEventListener("submit", async (e) => {
 view.addEventListener("click", async (e) => {
   try {
     if (e.target.closest("[data-action='cerrar-sesion']")) return void cerrarSesion();
+
+    /* ---- agenda: cambiar de mes / tocar un día ---- */
+    const agendaMes = e.target.closest("[data-action='agenda-mes']");
+    if (agendaMes) {
+      const [anio, mes] = ctxAgenda.mes.split("-").map(Number);
+      const otro = new Date(anio, mes - 1 + Number(agendaMes.dataset.delta), 1);
+      ctxAgenda.mes = toYMD(otro).slice(0, 7);
+      ctxAgenda.dia = null;
+      return void render();
+    }
+    const agendaDia = e.target.closest("[data-action='agenda-dia']");
+    if (agendaDia) {
+      // tocar el mismo día otra vez lo suelta (vuelve a "todo el mes")
+      ctxAgenda.dia = agendaDia.dataset.dia && agendaDia.dataset.dia !== ctxAgenda.dia ? agendaDia.dataset.dia : null;
+      return void render();
+    }
 
     /* ---- pagos (dueño) ---- */
     const marcarPagadoBtn = e.target.closest("[data-action='marcar-pagado']");
