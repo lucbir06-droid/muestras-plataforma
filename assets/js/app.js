@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=41";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=41";
-import { sb } from "./supabase-client.js?v=41";
+import { Store, toYMD } from "./store.js?v=42";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=42";
+import { sb } from "./supabase-client.js?v=42";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=41";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=41" en los imports de arriba son para que el navegador de
+   Los "?v=42" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=41" en el proyecto (app/index.html, store.js e
+   aparezca "?v=42" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -80,6 +80,9 @@ function clasePruebaUsada() {
 function navVisible(item) {
   if (!item.roles.includes(rol())) return false;
   if (item.path === "/clases-prueba" && clasePruebaUsada()) return false;
+  // En la app de iPhone, Hábitos Premium no se ofrece ni se menciona: la
+  // sección solo existe para quien ya lo tiene activo (ver EN_APP_IPHONE).
+  if (item.path === "/evidencias" && EN_APP_IPHONE && esAlumno() && !Store.alumnos().some((a) => a.habitosPremium)) return false;
   return true;
 }
 
@@ -486,8 +489,8 @@ function SignupView(errorMsg) {
           <small style="display:block;margin-top:6px;font-size:.74rem;color:var(--muted);">Te lo da el dueño de la academia. Sin este código no se puede crear la cuenta.</small>
         </div>
         <div class="field"><label>Correo</label><input name="email" type="email" required autocomplete="username" /></div>
-        <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
-        <div class="field"><label>País</label><input name="pais" required placeholder="México" /></div>
+        <div class="field"><label>Teléfono (opcional)</label><input name="telefono" type="tel" placeholder="+52 55 0000 0000" autocomplete="tel" /></div>
+        <div class="field"><label>País (opcional)</label><input name="pais" placeholder="México" autocomplete="country-name" /></div>
         <div class="field"><label>Contraseña</label><input name="password" type="password" required minlength="6" autocomplete="new-password" /></div>
         <button class="btn btn-primary btn-sm" type="submit" style="width:100%;">Crear cuenta</button>
         <p style="font-size:.74rem;color:var(--muted);margin-top:12px;text-align:center;">
@@ -959,7 +962,7 @@ function resumenAlumno(a) {
           <p style="font-size:.88rem;color:var(--ink-soft);margin-top:6px;">${esc(ultimo.nota)}</p>
         </div>` : ""}
       <div class="row-actions">
-        <a class="btn btn-primary btn-sm" href="#/evidencias">${icon("i-task")} ${a.habitosPremium ? "Subir hábito" : "Hábitos Premium"}</a>
+        ${a.habitosPremium || !EN_APP_IPHONE ? `<a class="btn btn-primary btn-sm" href="#/evidencias">${icon("i-task")} ${a.habitosPremium ? "Subir hábito" : "Hábitos Premium"}</a>` : ""}
         <a class="btn btn-ghost btn-sm" href="#/alumnos/${a.id}">Ver reportes y ficha</a>
         <a class="btn btn-ghost btn-sm" href="#/pagos">Mi suscripción</a>
       </div>
@@ -1433,8 +1436,7 @@ function HabitosUpsell(evidencias) {
         </p>
         ${EN_APP_IPHONE ? `
         <p style="font-size:.82rem;color:var(--muted);">
-          Hábitos Premium se contrata directamente con la academia. Cuando lo tengas activo,
-          aquí vas a poder subir tus hábitos.
+          Esta sección no está activa en tu cuenta.
         </p>` : `
         <div class="price" style="margin-bottom:14px;">${fmtMXN(HABITOS_PREMIUM.precioMensual)} <small>/ mes</small></div>
         ${HABITOS_PREMIUM.linkPago
@@ -1968,11 +1970,11 @@ function SolicitudForm(titulo, bajada) {
           <div class="field"><label>Edad</label><input name="edad" type="number" min="4" max="23" required /></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
-          <div class="field"><label>País</label><input name="pais" required placeholder="México" /></div>
+          <div class="field"><label>Teléfono (opcional)</label><input name="telefono" type="tel" placeholder="+52 55 0000 0000" /></div>
+          <div class="field"><label>País (opcional)</label><input name="pais" placeholder="México" /></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Zona horaria</label><input name="zona" required placeholder="GMT-6" /></div>
+          <div class="field"><label>Zona horaria (opcional)</label><input name="zona" placeholder="GMT-6" /></div>
           <div class="field"><label>Sede de interés</label>
             <select name="sede">${SEDES_AGENDA.map((s) => `<option>${s}</option>`).join("")}</select>
           </div>
@@ -2046,7 +2048,7 @@ function solicitudFull(s) {
     <div class="row-card">
       <div class="grow">
         <div class="row-title">${esc(s.nombre)} · ${s.edad} años · ${esc(s.sede)}</div>
-        <div class="row-sub">${esc(s.telefono || "sin teléfono")} · ${esc(s.pais)} (${esc(s.zona)}) · ${fmtDate(s.fecha)}</div>
+        <div class="row-sub">${[s.telefono || "sin teléfono", [s.pais, s.zona ? `(${s.zona})` : ""].filter(Boolean).join(" "), fmtDate(s.fecha)].filter(Boolean).map(esc).join(" · ")}</div>
         ${s.mensaje ? `<div class="row-sub" style="margin-top:6px;color:var(--ink-soft);">"${esc(s.mensaje)}"</div>` : ""}
       </div>
       ${s.estado === "pendiente" && esStaff() ? `
@@ -2313,7 +2315,7 @@ function Inscribirse(fullPath) {
       ${found ? `<div class="mp-note" style="margin-bottom:16px;">Plan preseleccionado: <b>${esc(found.plan.nombre)} · ${esc(found.dur.label)}</b> — ${fmtMXN(found.dur.real)}</div>` : ""}
       <form class="card" data-action="inscribirse" style="max-width:460px;">
         <div class="field"><label>Nombre del jugador</label><input name="nombre" required placeholder="Nombre y apellido" /></div>
-        <div class="field"><label>Teléfono</label><input name="telefono" type="tel" required placeholder="+52 55 0000 0000" /></div>
+        <div class="field"><label>Teléfono (opcional)</label><input name="telefono" type="tel" placeholder="+52 55 0000 0000" /></div>
         <div class="field"><label>Plan</label>
           <select name="planDur">${planDurOptions(params.get("plan"), params.get("dur"))}</select>
         </div>
