@@ -50,5 +50,7 @@ fs.copyFileSync(
   path.join(wwwDir, "capacitor.js"),
 );
 fs.writeFileSync(path.join(wwwDir, "index.html"), html);
+// la página de diagnóstico de conexión va tal cual (no usa nada de assets/)
+fs.copyFileSync(path.join(root, "app", "diagnostico.html"), path.join(wwwDir, "diagnostico.html"));
 
 console.log("✔ mobile/www listo (copiado de app/ + assets/)");

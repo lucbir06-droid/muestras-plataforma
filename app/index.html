@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Chakra+Petch:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="../assets/css/brand.css?v=42" />
-<link rel="stylesheet" href="../assets/css/app.css?v=42" />
+<link rel="stylesheet" href="../assets/css/brand.css?v=43" />
+<link rel="stylesheet" href="../assets/css/app.css?v=43" />
 </head>
 <body>
 
@@ -101,7 +101,8 @@
       '<div class="row-title" style="font-size:1.05rem;margin-bottom:8px;">No se pudo cargar</div>' +
       '<p style="font-size:.86rem;color:var(--muted);margin-bottom:18px;">Puede ser la señal. Intenta de nuevo; si sigue igual, reinicia tu sesión y vuelve a entrar con tu correo y contraseña.</p>' +
       '<button class="btn btn-primary" style="width:100%;margin-bottom:10px;" id="rescateReintentar">Intentar de nuevo</button>' +
-      '<button class="btn btn-ghost" style="width:100%;" id="rescateReiniciar">Reiniciar mi sesión</button></div>';
+      '<button class="btn btn-ghost" style="width:100%;" id="rescateReiniciar">Reiniciar mi sesión</button>' +
+      '<a href="diagnostico.html" style="display:block;margin-top:16px;font-size:.8rem;color:var(--accent-2);">Revisar mi conexión</a></div>';
     document.getElementById("rescateReintentar").onclick = function () { location.reload(); };
     document.getElementById("rescateReiniciar").onclick = function () {
       try {
@@ -118,7 +119,9 @@
   }, 2000);
 })();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script type="module" src="../assets/js/app.js?v=42"></script>
+<!-- la librería de la base de datos va en nuestro propio sitio (antes venía de un
+     servidor externo: si ese no respondía, el panel entero quedaba en blanco) -->
+<script src="../assets/js/vendor/supabase.js?v=2.45.4"></script>
+<script type="module" src="../assets/js/app.js?v=43"></script>
 </body>
 </html>

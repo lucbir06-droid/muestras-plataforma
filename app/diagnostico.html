@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Diagnóstico de conexión — Millán Academy</title>
+<!-- Página de diagnóstico: prueba, desde el teléfono de quien la abre, si
+     puede llegar a cada servidor que usa el panel. No carga nada externo
+     para funcionar (ni fuentes ni librerías), justo para que abra aunque lo
+     demás falle. Sirve para saber por qué a alguien "no le carga". -->
+<style>
+  body{margin:0;padding:20px 16px 40px;background:#0B0C0C;color:#C7CCC6;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;}
+  h1{font-size:1.25rem;color:#F7F8F6;margin:0 0 6px;}
+  p{margin:0 0 16px;font-size:.9rem;color:#8B948A;}
+  .fila{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin-bottom:8px;border-radius:12px;background:#141614;border:1px solid rgba(255,255,255,.08);}
+  .fila b{color:#F7F8F6;font-weight:600;display:block;font-size:.92rem;}
+  .fila small{color:#8B948A;font-size:.78rem;word-break:break-word;}
+  .ic{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:.9rem;background:#232622;color:#8B948A;}
+  .ok .ic{background:#7CC26B;color:#0C130E;} .mal .ic{background:#E0673F;color:#fff;}
+  button{width:100%;min-height:50px;border:0;border-radius:12px;background:#7CC26B;color:#0C130E;font:600 1rem system-ui;margin-top:14px;}
+  button.sec{background:none;border:1px solid rgba(255,255,255,.14);color:#F7F8F6;}
+  #resumen{margin:16px 0;padding:14px;border-radius:12px;font-size:.92rem;color:#F7F8F6;background:#1B1E1B;border:1px solid rgba(255,255,255,.08);}
+</style>
+</head>
+<body>
+<h1>Diagnóstico de conexión</h1>
+<p>Esto revisa si tu teléfono puede llegar a cada parte del panel. Tarda unos segundos. Al terminar, toca <b style="color:#F7F8F6">Copiar resultado</b> y mándaselo a la academia.</p>
+<div id="lista"></div>
+<div id="resumen" hidden></div>
+<button id="copiar" hidden>Copiar resultado</button>
+<button id="otra" class="sec" hidden>Probar otra vez</button>
+
+<script>
+(function () {
+  var API = "https://nqwfbvrqdmovbgravmxk.supabase.co";
+  var KEY = "sb_publishable_K8IXANBcmjHligyTEKF6AA_kadlcq6O";
+  var PRUEBAS = [
+    { id: "sitio", nombre: "El sitio (millanacademy.com)", url: "./index.html?d=" + Date.now(), opts: { cache: "no-store" } },
+    { id: "sesion", nombre: "Servidor de cuentas (inicio de sesión)", url: API + "/auth/v1/health", opts: { headers: { apikey: KEY } } },
+    { id: "datos", nombre: "Servidor de datos (alumnos, pagos…)", url: API + "/rest/v1/?apikey=" + KEY, opts: { headers: { apikey: KEY } }, cualquierRespuesta: true },
+    { id: "fotos", nombre: "Servidor de fotos", url: API + "/storage/v1/bucket", opts: { headers: { apikey: KEY } }, cualquierRespuesta: true },
+    { id: "libreria", nombre: "Librerías externas (jsDelivr)", url: "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/package.json", opts: {} },
+    { id: "fuentes", nombre: "Tipografías (Google Fonts)", url: "https://fonts.googleapis.com/css2?family=Barlow&display=swap", opts: { mode: "no-cors" }, opaca: true },
+  ];
+  var lista = document.getElementById("lista"), lineas = [];
+
+  function fila(p) {
+    var d = document.createElement("div");
+    d.className = "fila"; d.id = "f-" + p.id;
+    d.innerHTML = '<span class="ic">…</span><div><b>' + p.nombre + '</b><small>probando…</small></div>';
+    lista.appendChild(d);
+    return d;
+  }
+  function conLimite(promesa, ms) {
+    return Promise.race([promesa, new Promise(function (_, no) { setTimeout(function () { no(new Error("sin respuesta en " + ms / 1000 + " s")); }, ms); })]);
+  }
+  function probar(p) {
+    var el = fila(p), t0 = Date.now();
+    return conLimite(fetch(p.url, p.opts), 12000).then(function (r) {
+      var ms = Date.now() - t0;
+      // "cualquierRespuesta": basta con que el servidor conteste, aunque sea "no autorizado"
+      var ok = p.opaca || p.cualquierRespuesta || r.ok;
+      return { ok: ok, texto: (ok ? "responde" : "respondió con error " + r.status) + " · " + ms + " ms" };
+    }).catch(function (e) {
+      return { ok: false, texto: "NO se pudo conectar (" + (e && e.message || e) + ") · " + (Date.now() - t0) + " ms" };
+    }).then(function (res) {
+      el.className = "fila " + (res.ok ? "ok" : "mal");
+      el.querySelector(".ic").textContent = res.ok ? "✓" : "✕";
+      el.querySelector("small").textContent = res.texto;
+      lineas.push((res.ok ? "OK   " : "FALLA ") + p.nombre + " — " + res.texto);
+      return res.ok;
+    });
+  }
+
+  function correr() {
+    lista.innerHTML = ""; lineas = [];
+    document.getElementById("resumen").hidden = true;
+    document.getElementById("copiar").hidden = true;
+    document.getElementById("otra").hidden = true;
+    var c = navigator.connection || {};
+    var red = (c.type || "") + " " + (c.effectiveType || "");
+    Promise.all(PRUEBAS.map(probar)).then(function (oks) {
+      var mal = PRUEBAS.filter(function (_, i) { return !oks[i]; });
+      var servidor = mal.some(function (p) { return p.id === "sesion" || p.id === "datos"; });
+      var res = document.getElementById("resumen");
+      res.hidden = false;
+      res.textContent = !mal.length ? "Todo responde bien desde este teléfono."
+        : servidor ? "Este teléfono NO puede llegar al servidor de la academia con esta conexión. Por eso el panel no carga o no deja entrar. Manda este resultado a la academia."
+        : "Falló una parte que no impide entrar al panel. Manda este resultado a la academia.";
+      lineas.unshift("Diagnóstico Millán Academy — " + new Date().toLocaleString("es-MX"));
+      lineas.push("Conexión: " + (red.trim() || "no informada") + (navigator.onLine ? "" : " (el teléfono dice que está sin internet)"));
+      lineas.push("Navegador: " + navigator.userAgent);
+      document.getElementById("copiar").hidden = false;
+      document.getElementById("otra").hidden = false;
+    });
+  }
+  document.getElementById("otra").onclick = correr;
+  document.getElementById("copiar").onclick = function () {
+    var texto = lineas.join("\n"), b = this;
+    function listo() { b.textContent = "Copiado ✓ — pégalo en WhatsApp"; }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(listo, function () { prompt("Copia este texto:", texto); });
+    else prompt("Copia este texto:", texto);
+  };
+  correr();
+})();
+</script>
+</body>
+</html>

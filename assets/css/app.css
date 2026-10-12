@@ -696,3 +696,6 @@ button.link-crit:hover{color:var(--crit);}
 .fila-corte{align-items:center;flex-wrap:nowrap;gap:12px;}
 .fila-corte a.grow{min-width:0;}
 .fila-corte .btn{flex:none;}
+
+.auth-ayuda{margin-top:16px;text-align:center;font-size:.8rem;color:var(--muted);}
+.auth-ayuda a{color:var(--accent-2);}
