@@ -73,6 +73,48 @@
     });
   }
 
+  // El panel pide 16 cosas a la vez al abrir: se repite eso 3 veces para ver
+  // si alguna se pierde en el camino (fallas que van y vienen).
+  function pruebaDeCarga() {
+    var p = { id: "carga", nombre: "Carga completa del panel (48 peticiones)" };
+    var el = fila(p), t0 = Date.now(), fallas = 0, lenta = 0, errores = {};
+    function ronda() {
+      var una = [];
+      for (var i = 0; i < 16; i++) {
+        (function () {
+          var t = Date.now();
+          una.push(conLimite(fetch(API + "/rest/v1/objetivos_categoria?select=id&limit=1", { headers: { apikey: KEY }, cache: "no-store" }), 12000)
+            .then(function () { lenta = Math.max(lenta, Date.now() - t); })
+            .catch(function (e) { fallas++; var m = String(e && e.message || e); errores[m] = (errores[m] || 0) + 1; }));
+        })();
+      }
+      return Promise.all(una);
+    }
+    return ronda().then(ronda).then(ronda).then(function () {
+      var ok = fallas === 0;
+      var texto = ok ? "las 48 llegaron · la más lenta " + lenta + " ms · total " + (Date.now() - t0) + " ms"
+        : fallas + " de 48 NO llegaron (" + Object.keys(errores).map(function (k) { return k + " ×" + errores[k]; }).join(", ") + ")";
+      el.className = "fila " + (ok ? "ok" : "mal");
+      el.querySelector(".ic").textContent = ok ? "✓" : "✕";
+      el.querySelector("small").textContent = texto;
+      lineas.push((ok ? "OK   " : "FALLA ") + p.nombre + " — " + texto);
+      return ok;
+    });
+  }
+  function bitacora() {
+    var fallos = [];
+    try { fallos = JSON.parse(localStorage.getItem("ma_fallos") || "[]"); } catch (e) {}
+    lineas.push("Últimos fallos guardados en este teléfono: " + (fallos.length || "ninguno"));
+    fallos.slice(-12).forEach(function (f) {
+      lineas.push("  " + new Date(f.t).toLocaleString("es-MX") + " · " + f.que + " · " + f.d);
+    });
+    var d = document.createElement("div");
+    d.className = "fila " + (fallos.length ? "mal" : "ok");
+    d.innerHTML = '<span class="ic">' + (fallos.length ? "!" : "✓") + '</span><div><b>Fallos anteriores en este teléfono</b><small>' +
+      (fallos.length ? fallos.length + " guardados (van en el resultado al copiar)" : "ninguno guardado") + "</small></div>";
+    lista.appendChild(d);
+  }
+
   function correr() {
     lista.innerHTML = ""; lineas = [];
     document.getElementById("resumen").hidden = true;
@@ -81,16 +123,20 @@
     var c = navigator.connection || {};
     var red = (c.type || "") + " " + (c.effectiveType || "");
     Promise.all(PRUEBAS.map(probar)).then(function (oks) {
+      return pruebaDeCarga().then(function (okCarga) { oks.cargaOk = okCarga; return oks; });
+    }).then(function (oks) {
       var mal = PRUEBAS.filter(function (_, i) { return !oks[i]; });
       var servidor = mal.some(function (p) { return p.id === "sesion" || p.id === "datos"; });
       var res = document.getElementById("resumen");
       res.hidden = false;
-      res.textContent = !mal.length ? "Todo responde bien desde este teléfono."
+      res.textContent = !mal.length && oks.cargaOk === false ? "El servidor responde, pero se pierden peticiones cuando se piden varias a la vez. Manda este resultado a la academia."
+        : !mal.length ? "Todo responde bien desde este teléfono en este momento."
         : servidor ? "Este teléfono NO puede llegar al servidor de la academia con esta conexión. Por eso el panel no carga o no deja entrar. Manda este resultado a la academia."
         : "Falló una parte que no impide entrar al panel. Manda este resultado a la academia.";
       lineas.unshift("Diagnóstico Millán Academy — " + new Date().toLocaleString("es-MX"));
       lineas.push("Conexión: " + (red.trim() || "no informada") + (navigator.onLine ? "" : " (el teléfono dice que está sin internet)"));
       lineas.push("Navegador: " + navigator.userAgent);
+      bitacora();
       document.getElementById("copiar").hidden = false;
       document.getElementById("otra").hidden = false;
     });

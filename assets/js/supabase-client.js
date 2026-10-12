@@ -55,7 +55,12 @@ async function fetchConReintento(url, opciones = {}) {
       return await fetch(url, opciones);
     } catch (err) {
       // AbortError = lo canceló la propia app; cualquier otro TypeError = red
-      if (err?.name === "AbortError" || intento >= esperas.length) throw err;
+      if (err?.name === "AbortError") throw err;
+      if (intento >= esperas.length) {
+        const ruta = String(url).replace(SUPABASE_URL, "").split("?")[0];
+        window.maAnotar?.("sin conexión al servidor", `${metodo} ${ruta} · ${intento + 1} intento(s) · ${err?.message || err}`);
+        throw err;
+      }
       await new Promise((ok) => setTimeout(ok, esperas[intento]));
     }
   }

@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Chakra+Petch:wght@500;600;700&display=swap" />
-<link rel="stylesheet" href="../assets/css/brand.css?v=44" />
-<link rel="stylesheet" href="../assets/css/app.css?v=44" />
+<link rel="stylesheet" href="../assets/css/brand.css?v=45" />
+<link rel="stylesheet" href="../assets/css/app.css?v=45" />
 </head>
 <body>
 
@@ -87,6 +87,23 @@
      cómo salir. Va como script normal (no módulo) para que funcione aunque
      falle todo lo demás. -->
 <script>
+// Bitácora local de fallos: lo último que salió mal en ESTE teléfono (un
+// error del panel, una petición que no llegó). Se guarda solo en el
+// teléfono y la página de diagnóstico la muestra, para poder saber qué
+// pasó después de que a alguien "no le cargó".
+window.maAnotar = function (que, detalle) {
+  try {
+    var lista = JSON.parse(localStorage.getItem("ma_fallos") || "[]");
+    lista.push({ t: new Date().toISOString(), que: String(que).slice(0, 80), d: String(detalle || "").slice(0, 300) });
+    localStorage.setItem("ma_fallos", JSON.stringify(lista.slice(-25)));
+  } catch (e) {}
+};
+window.addEventListener("error", function (e) {
+  window.maAnotar("error del panel", (e.message || "") + " @ " + String(e.filename || "").split("/").pop() + ":" + (e.lineno || ""));
+});
+window.addEventListener("unhandledrejection", function (e) {
+  window.maAnotar("promesa sin atender", (e.reason && (e.reason.message || e.reason)) || "");
+});
 (function () {
   var view = document.getElementById("view"), atorado = 0, mostrado = false;
   function cargando() {
@@ -95,6 +112,7 @@
   }
   function rescate() {
     mostrado = true;
+    window.maAnotar("no cargó en 12 s", "pantalla: " + ((view.textContent || "").trim().slice(0, 40) || "vacía") + " · " + location.hash);
     view.style.padding = "";
     view.innerHTML =
       '<div class="card" style="max-width:420px;margin:40px auto;text-align:center;">' +
@@ -122,6 +140,6 @@
 <!-- la librería de la base de datos va en nuestro propio sitio (antes venía de un
      servidor externo: si ese no respondía, el panel entero quedaba en blanco) -->
 <script src="../assets/js/vendor/supabase.js?v=2.45.4"></script>
-<script type="module" src="../assets/js/app.js?v=44"></script>
+<script type="module" src="../assets/js/app.js?v=45"></script>
 </body>
 </html>
