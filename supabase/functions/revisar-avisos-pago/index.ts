@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
       await enviarCorreo(
         TO_MILLAN,
         `Avisos de pago — ${lineas.length} alumno${lineas.length > 1 ? "s" : ""}`,
-        `Resumen de fechas de corte de hoy:\n\n${lineas.join("\n")}`,
+        `Resumen de fechas límite de pago de hoy:\n\n${lineas.join("\n")}`,
       );
     }
 

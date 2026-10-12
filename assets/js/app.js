@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=46";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=46";
-import { sb } from "./supabase-client.js?v=46";
+import { Store, toYMD } from "./store.js?v=47";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=47";
+import { sb } from "./supabase-client.js?v=47";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=46";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=46" en los imports de arriba son para que el navegador de
+   Los "?v=47" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=46" en el proyecto (app/index.html, store.js e
+   aparezca "?v=47" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -86,14 +86,16 @@ function navVisible(item) {
   return true;
 }
 
-// Los alumnos "de" quien está viendo: el dueño ve a todos, el profe solo a
-// los que tiene asignados, y el papá/alumno a los ligados a su cuenta.
+// Los alumnos "de" quien está viendo: el dueño ve a todos; el profe a los
+// que tiene asignados MÁS los que todavía no tienen profe (si no, un alumno
+// sin asignar no le aparecía a nadie y no había forma de hacerle su
+// reporte); el papá/alumno, a los ligados a su cuenta.
 // (Asistencia y check-out NO usan esto: ahí se pasa lista a toda la sede,
 // porque varios profes entrenan al mismo grupo.)
 function misAlumnos() {
   if (esAlumno()) return Store.alumnos();
   const activos = Store.alumnosActivos();
-  return esDueno() ? activos : activos.filter((a) => a.coachId === perfil?.id);
+  return esDueno() ? activos : activos.filter((a) => !a.coachId || a.coachId === perfil?.id);
 }
 
 function itemDeRuta(path) {
@@ -264,8 +266,8 @@ function estadoSuscripcion(alumnoId) {
   const vence = fechaVencimiento(alumnoId);
   if (vence) {
     const hoy = diaLocal(new Date());
-    if (vence > hoy) return { texto: "Activa", kind: "ok", detalle: `Fecha de corte: ${fmtDateLong(vence)}`, vence };
-    if (vence.getTime() === hoy.getTime()) return { texto: "Vence hoy", kind: "warn", detalle: "Tu fecha de pago es hoy.", vence };
+    if (vence > hoy) return { texto: "Activa", kind: "ok", detalle: `Fecha límite de pago: ${fmtDateLong(vence)}`, vence };
+    if (vence.getTime() === hoy.getTime()) return { texto: "Vence hoy", kind: "warn", detalle: "Hoy es tu fecha límite de pago.", vence };
     return { texto: "Vencida", kind: "crit", detalle: `Venció el ${fmtDateLong(vence)}`, vence };
   }
   if (pendiente) return { texto: "Pago pendiente", kind: "warn", detalle: `${pendiente.concepto} · ${fmtMoney(pendiente.monto, pendiente.moneda)}`, vence: null };
@@ -810,7 +812,7 @@ async function revisarAvisosPagos() {
     if (lineas.length) {
       await notificarEmail({
         subject: `Avisos de pago — ${lineas.length} alumno${lineas.length > 1 ? "s" : ""}`,
-        message: `Resumen de fechas de corte de hoy:\n\n${lineas.join("\n")}`,
+        message: `Resumen de fechas límite de pago de hoy:\n\n${lineas.join("\n")}`,
       });
     }
   } catch (err) {
@@ -939,7 +941,8 @@ function alumnoCard(a) {
           <div class="meta">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</div>
         </div>
       </div>
-      ${sus ? `<div class="meta" style="margin-top:8px;">${badge(sus.vence ? (sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Corte: ${fmtDate(sus.vence)}`) : sus.texto, sus.kind)}</div>` : ""}
+      ${rol() === "profe" ? `<div class="meta" style="margin-top:8px;">${a.coachId ? badge("Tu alumno", "ok") : badge("Sin profe asignado", "muted")}</div>` : ""}
+      ${sus ? `<div class="meta" style="margin-top:8px;">${badge(sus.vence ? (sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Límite: ${fmtDate(sus.vence)}`) : sus.texto, sus.kind)}</div>` : ""}
       ${top ? `
         <div class="goal">
           <div class="rowline"><span>${esc(top.titulo)}</span><em>${top.avance}%</em></div>
@@ -1028,11 +1031,11 @@ function MiSuscripcion() {
       ? `<p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Tu pago es <b>${periodicidadLabel[a.periodicidadPago] || a.periodicidadPago}</b>, desde el ${fmtDate(a.fechaPagoInicial)}.</p>`
       : `<form data-action="declarar-fecha-pago" data-alumno="${a.id}" class="card" style="margin-bottom:14px;">
           <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:12px;max-width:60ch;">
-            Dinos qué día te toca pagar. Por ejemplo, si pagas cada día 15, pon el 15 que
-            te toca (este mes o el próximo). Cada pago aparece como recibido cuando la academia lo confirma.
+            Dinos cuál es tu fecha límite de pago. Por ejemplo, si pagas a más tardar cada día 10, pon el 10
+            que te toca (este mes o el próximo). Cada pago aparece como recibido cuando la academia lo confirma.
           </p>
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-            <div class="field" style="margin:0;"><label>¿Qué día te toca pagar?</label><input name="fecha" type="date" required /></div>
+            <div class="field" style="margin:0;"><label>Tu fecha límite de pago</label><input name="fecha" type="date" required /></div>
             <div class="field" style="margin:0;"><label>¿Cada cuánto pagas?</label>
               <select name="periodicidad"><option value="mensual">Mensual</option><option value="6meses">6 meses</option><option value="anual">Anual</option></select>
             </div>
@@ -1642,8 +1645,8 @@ function AlumnoDetail(id) {
   const a = Store.alumno(id);
   if (!a) return `<div class="empty">No encontramos este alumno. <a href="#/${esStaff() ? "alumnos" : ""}" style="color:var(--accent-2)">Volver</a>.</div>`;
   // un profe solo abre la ficha de sus alumnos asignados
-  if (rol() === "profe" && a.coachId !== perfil.id) {
-    return `<div class="empty">${esc(a.nombre)} no está asignado a ti. <a href="#/alumnos" style="color:var(--accent-2)">Ver mis alumnos</a>.</div>`;
+  if (rol() === "profe" && a.coachId && a.coachId !== perfil.id) {
+    return `<div class="empty">${esc(a.nombre)} está asignado a otro profe. <a href="#/alumnos" style="color:var(--accent-2)">Ver mis alumnos</a>.</div>`;
   }
 
   const staff = esStaff();
@@ -1703,9 +1706,9 @@ function AlumnoDetail(id) {
         <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
       </form>
       <form data-action="corregir-fecha-pago" data-alumno="${a.id}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-        <div class="field" style="margin:0;"><label>Le toca pagar el</label>
+        <div class="field" style="margin:0;"><label>Fecha límite de pago</label>
           <input name="fecha" type="date" value="${a.fechaPagoInicial || ""}" /></div>
-        <div class="field" style="margin:0;"><label>Y después, cada</label>
+        <div class="field" style="margin:0;"><label>Se repite cada</label>
           <select name="periodicidad">
             <option value="mensual" ${!a.periodicidadPago || a.periodicidadPago === "mensual" ? "selected" : ""}>Mes</option>
             <option value="6meses" ${a.periodicidadPago === "6meses" ? "selected" : ""}>6 meses</option>
@@ -1713,7 +1716,7 @@ function AlumnoDetail(id) {
           </select></div>
         <button class="btn btn-primary btn-sm" type="submit">Guardar fecha</button>
         <p style="width:100%;font-size:.74rem;color:var(--muted);margin:0;">
-          ${(() => { const v = fechaVencimiento(a.id); return v ? `Hoy su fecha de corte es el <b style="color:var(--ink)">${fmtDateLong(v)}</b>. ` : ""; })()}Lo que pongas aquí manda: esa pasa a ser su fecha de corte, sin importar los pagos registrados antes. Cuando registres su siguiente pago, avanza sola.
+          ${(() => { const v = fechaVencimiento(a.id); return v ? `Hoy su fecha límite de pago es el <b style="color:var(--ink)">${fmtDateLong(v)}</b>. ` : ""; })()}Lo que pongas aquí manda: esa pasa a ser su fecha límite, sin importar los pagos registrados antes. Cuando registres su siguiente pago, avanza sola.
         </p>
       </form>` : ""}
     </div>` : ""}
@@ -2125,7 +2128,7 @@ function Reportes() {
             <div class="row-sub">avance de objetivos</div>
             ${esDueno() ? (() => {
               const sus = estadoSuscripcion(a.id);
-              return sus.vence ? `<div style="margin-top:8px;">${badge(sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Corte: ${fmtDate(sus.vence)}`, sus.kind)}</div>` : "";
+              return sus.vence ? `<div style="margin-top:8px;">${badge(sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Límite: ${fmtDate(sus.vence)}`, sus.kind)}</div>` : "";
             })() : ""}
           </div>
         </a>`;
@@ -2224,11 +2227,11 @@ function Pagos() {
 
     ${fechas.length ? `
     <div class="block">
-      <div class="block-head"><h3>Fecha de corte por alumno</h3></div>
+      <div class="block-head"><h3>Fecha límite de pago por alumno</h3></div>
       <div class="list">
         ${fechas.map(({ a, vence }) => {
           const vencido = vence < new Date(new Date().toDateString());
-          return filaCorte(a, vencido ? `Venció ${fmtDate(vence)}` : `Corte: ${fmtDate(vence)}`, vencido ? "crit" : "ok");
+          return filaCorte(a, vencido ? `Venció ${fmtDate(vence)}` : `Límite: ${fmtDate(vence)}`, vencido ? "crit" : "ok");
         }).join("")}
       </div>
     </div>` : ""}
@@ -2484,7 +2487,7 @@ function Duenos() {
 
     ${vencidos.length || porVencer.length ? `
     <div class="block">
-      <div class="block-head"><h3>Fechas de corte</h3></div>
+      <div class="block-head"><h3>Fechas límite de pago</h3></div>
       ${vencidos.length ? `
         <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--crit);margin-bottom:10px;">Vencidos — cobrar</p>
         <div class="list" style="margin-bottom:18px;">
@@ -2493,7 +2496,7 @@ function Duenos() {
       ${porVencer.length ? `
         <p style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);margin-bottom:10px;">Vencen esta semana</p>
         <div class="list">
-          ${porVencer.map(({ a, vence }) => filaCorte(a, `Corte ${fmtDate(vence)}`, "warn")).join("")}
+          ${porVencer.map(({ a, vence }) => filaCorte(a, `Límite ${fmtDate(vence)}`, "warn")).join("")}
         </div>` : ""}
     </div>` : ""}
 
@@ -2981,7 +2984,7 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "corregir-fecha-pago") {
       await Store.corregirFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
       const corte = fechaVencimiento(form.dataset.alumno);
-      toast(corte ? `Listo — su fecha de corte es el ${fmtDate(corte)}` : "Se quitó su fecha de pago");
+      toast(corte ? `Listo — su fecha límite de pago es el ${fmtDate(corte)}` : "Se quitó su fecha de pago");
     } else if (action === "add-bitacora") {
       await Store.addBitacora({
         alumnoId: form.dataset.alumno, tipo: data.tipo, nota: data.nota.trim(), autor: perfil?.nombre,
