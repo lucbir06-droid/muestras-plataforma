@@ -13,9 +13,13 @@
 // Puesta en marcha (una sola vez):
 // 1. Pegar esta función en Supabase → Edge Functions → Create function
 //    "revisar-avisos-pago" → Deploy.
-// 2. Supabase → Database → Cron Jobs → New Job:
+//    y APAGAR "Verify JWT" en sus Settings.
+// 2. Edge Functions → Secrets: CRON_SECRET = una clave larga al azar.
+// 3. Supabase → Integrations → Cron → New Job:
 //    - Tipo: "Supabase Edge Function"
 //    - Función: revisar-avisos-pago
+//    - HTTP Headers → Add header: x-cron-secret = la misma clave
+//    - Timeout: 5000
 //    - Horario: una vez al día (ej. "0 15 * * *" = todos los días 9am
 //      hora de México).
 
@@ -107,7 +111,18 @@ async function enviarPush(alumnoId: string, titulo: string, cuerpo: string) {
   if (!res.ok) throw new Error(`enviar-push respondió ${res.status}`);
 }
 
-Deno.serve(async () => {
+// Esta función la llama el Cron de Supabase, no un usuario, así que va con
+// "Verify JWT" apagado. Para que no la pueda disparar cualquiera desde
+// internet, el Cron manda un encabezado con una clave que solo conocen él
+// y esta función (secret CRON_SECRET).
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
+
+Deno.serve(async (req) => {
+  if (!CRON_SECRET || req.headers.get("x-cron-secret") !== CRON_SECRET) {
+    return new Response(JSON.stringify({ success: false, message: "No autorizado" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    });
+  }
   try {
     // "hoy" según la hora de México (esta función corre en UTC)
     const hoy = dia(new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" }));
