@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=45";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=45";
-import { sb } from "./supabase-client.js?v=45";
+import { Store, toYMD } from "./store.js?v=46";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=46";
+import { sb } from "./supabase-client.js?v=46";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=45";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=45" en los imports de arriba son para que el navegador de
+   Los "?v=46" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=45" en el proyecto (app/index.html, store.js e
+   aparezca "?v=46" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -220,12 +220,20 @@ function diaLocal(v) {
 //  - Con pagos: el último pago cubre el día de pago que le correspondía
 //    (aunque haya pagado unos días antes o después) y el corte pasa al
 //    siguiente: paga el 5 o el 25 de octubre lo del día 1 → 1 de noviembre.
+//  - Si el dueño fija la fecha a mano, esa manda: los pagos cargados antes
+//    de ese momento ya no cuentan (así "10 de octubre" es 10 de octubre).
 //  - Sin día de pago fijado: se cuenta desde la fecha del último pago.
 // null si no hay ni pagos ni día de pago.
 function fechaVencimiento(alumnoId) {
   const a = Store.alumno(alumnoId);
-  const ultimo = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad);
-  const ancla = a?.fechaPagoInicial && a.periodicidadPago ? diaLocal(a.fechaPagoInicial) : null;
+  // Si el dueño fijó la fecha de pago a mano, eso manda: solo cuentan los
+  // pagos registrados DESPUÉS de que la fijó (aunque el pago tenga una fecha
+  // anterior, lo que importa es cuándo se cargó).
+  const fijadaEn = a?.fechaPagoFijadaEn ? new Date(a.fechaPagoFijadaEn) : null;
+  const ultimo = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad
+    && (!fijadaEn || new Date(p.registradoEn) > fijadaEn));
+  const ancla = a?.fechaPagoInicial ? diaLocal(a.fechaPagoInicial) : null;
+  const cadaCuanto = a?.periodicidadPago || "mensual";
   if (!ancla) return ultimo ? diaLocal(sumarPeriodo(ultimo.fecha, ultimo.periodicidad)) : null;
 
   // el día de pago más reciente (ancla, ancla + 1 periodo, …) que no pasa de `tope`
@@ -233,7 +241,7 @@ function fechaVencimiento(alumnoId) {
     if (ancla > tope) return null;
     let d = ancla;
     for (let i = 0; i < 600; i++) {
-      const sig = diaLocal(sumarPeriodo(d, a.periodicidadPago));
+      const sig = diaLocal(sumarPeriodo(d, cadaCuanto));
       if (sig > tope) break;
       d = sig;
     }
@@ -1695,17 +1703,18 @@ function AlumnoDetail(id) {
         <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
       </form>
       <form data-action="corregir-fecha-pago" data-alumno="${a.id}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-        <div class="field" style="margin:0;"><label>Fecha de pago${a.fechaPagoInicial ? " (corregir)" : ""}</label>
+        <div class="field" style="margin:0;"><label>Le toca pagar el</label>
           <input name="fecha" type="date" value="${a.fechaPagoInicial || ""}" /></div>
-        <div class="field" style="margin:0;"><label>Periodicidad</label>
+        <div class="field" style="margin:0;"><label>Y después, cada</label>
           <select name="periodicidad">
-            <option value="" ${!a.periodicidadPago ? "selected" : ""}>—</option>
-            <option value="mensual" ${a.periodicidadPago === "mensual" ? "selected" : ""}>Mensual</option>
+            <option value="mensual" ${!a.periodicidadPago || a.periodicidadPago === "mensual" ? "selected" : ""}>Mes</option>
             <option value="6meses" ${a.periodicidadPago === "6meses" ? "selected" : ""}>6 meses</option>
-            <option value="anual" ${a.periodicidadPago === "anual" ? "selected" : ""}>Anual</option>
+            <option value="anual" ${a.periodicidadPago === "anual" ? "selected" : ""}>Año</option>
           </select></div>
-        <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
-        ${a.fechaPagoInicial ? `<p style="width:100%;font-size:.72rem;color:var(--muted);margin:0;">El alumno ya la declaró y no puede volver a tocarla — solo el dueño puede corregirla acá.</p>` : ""}
+        <button class="btn btn-primary btn-sm" type="submit">Guardar fecha</button>
+        <p style="width:100%;font-size:.74rem;color:var(--muted);margin:0;">
+          ${(() => { const v = fechaVencimiento(a.id); return v ? `Hoy su fecha de corte es el <b style="color:var(--ink)">${fmtDateLong(v)}</b>. ` : ""; })()}Lo que pongas aquí manda: esa pasa a ser su fecha de corte, sin importar los pagos registrados antes. Cuando registres su siguiente pago, avanza sola.
+        </p>
       </form>` : ""}
     </div>` : ""}
 
@@ -2971,7 +2980,8 @@ view.addEventListener("submit", async (e) => {
       toast("Fecha de pago guardada");
     } else if (action === "corregir-fecha-pago") {
       await Store.corregirFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
-      toast("Fecha de pago corregida");
+      const corte = fechaVencimiento(form.dataset.alumno);
+      toast(corte ? `Listo — su fecha de corte es el ${fmtDate(corte)}` : "Se quitó su fecha de pago");
     } else if (action === "add-bitacora") {
       await Store.addBitacora({
         alumnoId: form.dataset.alumno, tipo: data.tipo, nota: data.nota.trim(), autor: perfil?.nombre,

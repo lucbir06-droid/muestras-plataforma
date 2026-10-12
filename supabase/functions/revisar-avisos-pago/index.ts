@@ -54,17 +54,21 @@ function toYMD(d: Date): string {
 // registrado (ver la explicación completa en app.js)
 // deno-lint-ignore no-explicit-any
 function fechaVencimiento(alumno: any, pagos: any[], hoy: Date): Date | null {
+  // lo que fijó el dueño manda: solo cuentan los pagos registrados después
+  const fijadaEn = alumno.fecha_pago_fijada_en ? new Date(alumno.fecha_pago_fijada_en).getTime() : 0;
   const ultimo = pagos
-    .filter((p) => p.alumno_id === alumno.id && p.estado === "pagado" && p.periodicidad)
+    .filter((p) => p.alumno_id === alumno.id && p.estado === "pagado" && p.periodicidad
+      && (!fijadaEn || new Date(p.registrado_en || p.fecha).getTime() > fijadaEn))
     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
-  const ancla = alumno.fecha_pago_inicial && alumno.periodicidad_pago ? dia(alumno.fecha_pago_inicial) : null;
+  const ancla = alumno.fecha_pago_inicial ? dia(alumno.fecha_pago_inicial) : null;
+  const cadaCuanto = alumno.periodicidad_pago || "mensual";
   if (!ancla) return ultimo ? sumarPeriodo(ultimo.fecha, ultimo.periodicidad) : null;
 
   const diaDePagoHasta = (tope: Date): Date | null => {
     if (ancla > tope) return null;
     let d = ancla;
     for (let i = 0; i < 600; i++) {
-      const sig = sumarPeriodo(d, alumno.periodicidad_pago);
+      const sig = sumarPeriodo(d, cadaCuanto);
       if (sig > tope) break;
       d = sig;
     }
@@ -127,8 +131,8 @@ Deno.serve(async (req) => {
     // "hoy" según la hora de México (esta función corre en UTC)
     const hoy = dia(new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" }));
     const [{ data: alumnos, error: e1 }, { data: pagos, error: e2 }] = await Promise.all([
-      supabase.from("alumnos").select("id, nombre, correo, categoria, sedes, fecha_pago_inicial, periodicidad_pago").eq("activo", true),
-      supabase.from("pagos").select("alumno_id, estado, periodicidad, fecha").eq("estado", "pagado"),
+      supabase.from("alumnos").select("*").eq("activo", true),
+      supabase.from("pagos").select("*").eq("estado", "pagado"),
     ]);
     if (e1) throw e1;
     if (e2) throw e2;

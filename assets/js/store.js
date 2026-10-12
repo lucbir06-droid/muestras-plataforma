@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=45";
+import { sb } from "./supabase-client.js?v=46";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -86,6 +86,7 @@ const mapAlumno = (r) => ({
   evaluacion: r.evaluacion || { tactica: 0, tecnica: 0, fisico: 0, comentarios: "" },
   alta: r.alta, codigoVinculo: r.codigo_vinculo,
   fechaPagoInicial: r.fecha_pago_inicial, periodicidadPago: r.periodicidad_pago,
+  fechaPagoFijadaEn: r.fecha_pago_fijada_en || null,
   habitosPremium: r.habitos_premium,
 });
 const mapBitacora = (r) => ({ id: r.id, alumnoId: r.alumno_id, tipo: r.tipo, nota: r.nota, autor: r.autor, fecha: r.fecha });
@@ -97,6 +98,7 @@ const mapReserva = (r) => ({
 const mapPago = (r) => ({
   id: r.id, alumnoId: r.alumno_id, concepto: r.concepto, metodo: r.metodo, monto: Number(r.monto),
   moneda: r.moneda, periodicidad: r.periodicidad, fecha: r.fecha, estado: r.estado,
+  registradoEn: r.registrado_en || r.fecha,
 });
 const mapCheckin = (r) => ({
   id: r.id, nombre: r.nombre, sede: r.sede, tipo: r.tipo || "entrada", resumen: r.resumen,
@@ -247,10 +249,21 @@ export const Store = {
   // declararFechaPago / declarar_fecha_pago). Si se equivocó, o hay que
   // corregirla más adelante, la única forma es que el dueño la edite acá
   // (se controla en la UI, igual que la categoría / el profe a cargo).
+  //
+  // Lo que fija el dueño MANDA: se guarda además el momento en que la fijó
+  // (fecha_pago_fijada_en), y los pagos registrados antes de ese momento
+  // dejan de contar para la fecha de corte (ver fechaVencimiento en app.js).
+  // Así, si pone "10 de octubre", la fecha de corte es el 10 de octubre
+  // aunque hubiera un pago cargado antes.
   async corregirFechaPago(alumnoId, fecha, periodicidad) {
-    const { error } = await sb.from("alumnos")
-      .update({ fecha_pago_inicial: fecha || null, periodicidad_pago: periodicidad || null })
-      .eq("id", alumnoId);
+    const base = { fecha_pago_inicial: fecha || null, periodicidad_pago: fecha ? (periodicidad || "mensual") : null };
+    let { error } = await sb.from("alumnos")
+      .update({ ...base, fecha_pago_fijada_en: fecha ? new Date().toISOString() : null }).eq("id", alumnoId);
+    // si la base todavía no tiene esa columna (falta correr schema.sql), al
+    // menos se guarda la fecha como antes
+    if (error && /fecha_pago_fijada_en/.test(error.message || "")) {
+      ({ error } = await sb.from("alumnos").update(base).eq("id", alumnoId));
+    }
     if (error) throw error;
     await cargar("alumnos");
   },

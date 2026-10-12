@@ -812,3 +812,15 @@ create unique index if not exists pagos_mp_payment_id_key on public.pagos (mp_pa
 -- notificación a quien tiene clase al día siguiente y marca la reserva,
 -- para no avisar dos veces de la misma clase.
 alter table public.reservas add column if not exists recordado boolean not null default false;
+
+-- ---------------------------------------------------------------
+-- FECHA DE PAGO FIJADA POR EL DUEÑO
+-- ---------------------------------------------------------------
+-- Cuando el dueño corrige la fecha de pago de un alumno, esa fecha manda
+-- sobre los pagos cargados antes. Para saber qué pagos son "de antes" se
+-- guarda cuándo la fijó, y cuándo se registró cada pago (que no siempre es
+-- la fecha del pago: un pago se puede cargar con fecha atrasada).
+alter table public.alumnos add column if not exists fecha_pago_fijada_en timestamptz;
+alter table public.pagos add column if not exists registrado_en timestamptz;
+update public.pagos set registrado_en = fecha where registrado_en is null;
+alter table public.pagos alter column registrado_en set default now();
