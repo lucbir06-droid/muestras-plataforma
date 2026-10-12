@@ -30,30 +30,51 @@ const TO_MILLAN = "millanacademymx@gmail.com";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 // misma lógica que sumarPeriodo/fechaVencimiento en app.js — hay que
-// mantener las dos en sync si algún día cambia cómo se calcula la fecha de corte
+// mantener las dos en sync si algún día cambia cómo se calcula la fecha de corte.
+// Acá todo va en UTC al mediodía, para que ninguna zona horaria corra el día.
+function dia(v: string | Date): Date {
+  const s = typeof v === "string" ? v.slice(0, 10) : v.toISOString().slice(0, 10);
+  return new Date(`${s}T12:00:00Z`);
+}
 function sumarPeriodo(fecha: string | Date, periodicidad: string): Date {
-  const d = new Date(fecha);
-  d.setMonth(d.getMonth() + (periodicidad === "anual" ? 12 : periodicidad === "6meses" ? 6 : 1));
+  const d = dia(fecha);
+  d.setUTCMonth(d.getUTCMonth() + (periodicidad === "anual" ? 12 : periodicidad === "6meses" ? 6 : 1));
   return d;
 }
 
 function toYMD(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return d.toISOString().slice(0, 10);
 }
 
+// el día de pago más viejo que todavía no está cubierto por un pago
+// registrado (ver la explicación completa en app.js)
 // deno-lint-ignore no-explicit-any
-function fechaVencimiento(alumno: any, pagos: any[]): Date | null {
-  const delAlumno = pagos
+function fechaVencimiento(alumno: any, pagos: any[], hoy: Date): Date | null {
+  const ultimo = pagos
     .filter((p) => p.alumno_id === alumno.id && p.estado === "pagado" && p.periodicidad)
-    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-  if (delAlumno[0]) return sumarPeriodo(delAlumno[0].fecha, delAlumno[0].periodicidad);
+    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+  const ancla = alumno.fecha_pago_inicial && alumno.periodicidad_pago ? dia(alumno.fecha_pago_inicial) : null;
+  if (!ancla) return ultimo ? sumarPeriodo(ultimo.fecha, ultimo.periodicidad) : null;
 
-  if (!alumno.fecha_pago_inicial || !alumno.periodicidad_pago) return null;
-  let vence = sumarPeriodo(alumno.fecha_pago_inicial, alumno.periodicidad_pago);
-  const hoy = new Date(new Date().toDateString());
-  for (let i = 0; vence < hoy && i < 240; i++) vence = sumarPeriodo(vence, alumno.periodicidad_pago);
-  return vence;
+  const diaDePagoHasta = (tope: Date): Date | null => {
+    if (ancla > tope) return null;
+    let d = ancla;
+    for (let i = 0; i < 600; i++) {
+      const sig = sumarPeriodo(d, alumno.periodicidad_pago);
+      if (sig > tope) break;
+      d = sig;
+    }
+    return d;
+  };
+
+  if (ultimo) {
+    const tope = dia(ultimo.fecha);
+    tope.setUTCDate(tope.getUTCDate() + 5);
+    const cubierto = diaDePagoHasta(tope);
+    if (!cubierto) return ancla;
+    return sumarPeriodo(cubierto, ultimo.periodicidad);
+  }
+  return diaDePagoHasta(hoy) || ancla;
 }
 
 async function intentarMarcar(alumnoId: string, tipo: string, fechaVenc: string) {
@@ -88,7 +109,8 @@ async function enviarPush(alumnoId: string, titulo: string, cuerpo: string) {
 
 Deno.serve(async () => {
   try {
-    const hoy = new Date(new Date().toDateString());
+    // "hoy" según la hora de México (esta función corre en UTC)
+    const hoy = dia(new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" }));
     const [{ data: alumnos, error: e1 }, { data: pagos, error: e2 }] = await Promise.all([
       supabase.from("alumnos").select("id, nombre, correo, categoria, sedes, fecha_pago_inicial, periodicidad_pago").eq("activo", true),
       supabase.from("pagos").select("alumno_id, estado, periodicidad, fecha").eq("estado", "pagado"),
@@ -99,10 +121,10 @@ Deno.serve(async () => {
     const lineas: string[] = [];
 
     for (const a of alumnos || []) {
-      const venc = fechaVencimiento(a, pagos || []);
+      const venc = fechaVencimiento(a, pagos || [], hoy);
       if (!venc) continue;
       const dias = Math.round((venc.getTime() - hoy.getTime()) / 86400000);
-      const fechaLarga = venc.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+      const fechaLarga = venc.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
 
       if (dias === 3) {
         if (await intentarMarcar(a.id, "por_vencer", toYMD(venc))) {

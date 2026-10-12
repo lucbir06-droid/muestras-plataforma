@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=43";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=43";
-import { sb } from "./supabase-client.js?v=43";
+import { Store, toYMD } from "./store.js?v=44";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=44";
+import { sb } from "./supabase-client.js?v=44";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=43";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=43" en los imports de arriba son para que el navegador de
+   Los "?v=44" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=43" en el proyecto (app/index.html, store.js e
+   aparezca "?v=44" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -196,35 +196,68 @@ function barra(label, valor) {
 
 /* estado de la suscripción de un alumno según sus pagos */
 function sumarPeriodo(fecha, periodicidad) {
-  const d = new Date(fecha);
+  const d = new Date(parseFecha(fecha)); // parseFecha: "2026-10-10" es el 10 local, no el 9 por la zona horaria
   d.setMonth(d.getMonth() + (periodicidad === "anual" ? 12 : periodicidad === "6meses" ? 6 : 1));
   return d;
 }
+// el día (sin hora), en hora local
+function diaLocal(v) {
+  const d = new Date(parseFecha(v));
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
 
-// la "fecha de corte" de un alumno:
-//  1) si el staff ya registró un pago pagado, esa fecha + su periodicidad
-//     manda (es lo más confiable: alguien confirmó que sí se cobró).
-//  2) si no hay ningún pago cargado todavía, usamos lo que el alumno/papá
-//     declaró una sola vez (fechaPagoInicial + periodicidadPago),
-//     adelantada ciclo a ciclo hasta la próxima fecha que todavía no pasó.
-// null si no hay ni pagos ni fecha declarada.
+// La "fecha de corte" de un alumno = el día de pago más viejo que todavía
+// NO está cubierto por un pago registrado. Mientras la academia no
+// registre el pago, esa fecha se queda fija (y pasa a "vencida"): la app
+// ya no da por pagado un mes solo porque pasó el tiempo.
+//
+//  - "Día de pago" (fechaPagoInicial + periodicidadPago): lo declara el
+//    papá una vez o lo fija/corrige el dueño. Marca los días que le toca
+//    pagar: ese día, y el mismo día de cada mes (o cada 6 meses / año).
+//  - Sin ningún pago registrado: le toca el día de pago más reciente que
+//    ya llegó (ej. día de pago el 1, hoy es 11 de octubre → 1 de octubre,
+//    vencido). Si su primer día de pago todavía no llega, ese.
+//  - Con pagos: el último pago cubre el día de pago que le correspondía
+//    (aunque haya pagado unos días antes o después) y el corte pasa al
+//    siguiente: paga el 5 o el 25 de octubre lo del día 1 → 1 de noviembre.
+//  - Sin día de pago fijado: se cuenta desde la fecha del último pago.
+// null si no hay ni pagos ni día de pago.
 function fechaVencimiento(alumnoId) {
-  const ultimo = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad);
-  if (ultimo) return sumarPeriodo(ultimo.fecha, ultimo.periodicidad);
-
   const a = Store.alumno(alumnoId);
-  if (!a?.fechaPagoInicial || !a.periodicidadPago) return null;
-  let vence = sumarPeriodo(a.fechaPagoInicial, a.periodicidadPago);
-  const hoy = new Date(new Date().toDateString());
-  for (let i = 0; vence < hoy && i < 240; i++) vence = sumarPeriodo(vence, a.periodicidadPago);
-  return vence;
+  const ultimo = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad);
+  const ancla = a?.fechaPagoInicial && a.periodicidadPago ? diaLocal(a.fechaPagoInicial) : null;
+  if (!ancla) return ultimo ? diaLocal(sumarPeriodo(ultimo.fecha, ultimo.periodicidad)) : null;
+
+  // el día de pago más reciente (ancla, ancla + 1 periodo, …) que no pasa de `tope`
+  const diaDePagoHasta = (tope) => {
+    if (ancla > tope) return null;
+    let d = ancla;
+    for (let i = 0; i < 600; i++) {
+      const sig = diaLocal(sumarPeriodo(d, a.periodicidadPago));
+      if (sig > tope) break;
+      d = sig;
+    }
+    return d;
+  };
+
+  if (ultimo) {
+    // 5 días de margen: quien paga un poco antes de su día está pagando ese día
+    const tope = diaLocal(ultimo.fecha);
+    tope.setDate(tope.getDate() + 5);
+    const cubierto = diaDePagoHasta(tope);
+    if (!cubierto) return ancla; // ese pago es anterior al día de pago que se fijó después
+    return diaLocal(sumarPeriodo(cubierto, ultimo.periodicidad));
+  }
+  return diaDePagoHasta(diaLocal(new Date())) || ancla;
 }
 
 function estadoSuscripcion(alumnoId) {
   const pendiente = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pendiente");
   const vence = fechaVencimiento(alumnoId);
   if (vence) {
-    if (vence >= new Date()) return { texto: "Activa", kind: "ok", detalle: `Fecha de corte: ${fmtDateLong(vence)}`, vence };
+    const hoy = diaLocal(new Date());
+    if (vence > hoy) return { texto: "Activa", kind: "ok", detalle: `Fecha de corte: ${fmtDateLong(vence)}`, vence };
+    if (vence.getTime() === hoy.getTime()) return { texto: "Vence hoy", kind: "warn", detalle: "Tu fecha de pago es hoy.", vence };
     return { texto: "Vencida", kind: "crit", detalle: `Venció el ${fmtDateLong(vence)}`, vence };
   }
   if (pendiente) return { texto: "Pago pendiente", kind: "warn", detalle: `${pendiente.concepto} · ${fmtMoney(pendiente.monto, pendiente.moneda)}`, vence: null };
@@ -978,21 +1011,20 @@ function MiSuscripcion() {
     const pagos = Store.pagos().filter((p) => p.alumnoId === a.id);
     const diasParaVencer = sus.vence ? Math.round((sus.vence - new Date(new Date().toDateString())) / 86400000) : null;
     const avisoPago = sus.kind === "crit"
-      ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:14px;"><b>Pago vencido.</b> Renueva tu suscripción para seguir con acceso completo.</div>`
+      ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:14px;"><b>Tu pago está pendiente.</b> Si ya pagaste, la academia lo registra en cuanto lo confirme; si no, puedes pagar aquí abajo.</div>`
       : diasParaVencer !== null && diasParaVencer <= 3
         ? `<div class="mp-note" style="margin-bottom:14px;"><b>Tu pago vence en ${diasParaVencer === 0 ? "0 días — hoy" : diasParaVencer === 1 ? "1 día" : `${diasParaVencer} días`}.</b> Renueva a tiempo para no perder acceso.</div>`
         : "";
     const periodicidadLabel = { mensual: "Mensual", "6meses": "6 meses", anual: "Anual" };
     const declararFecha = a.fechaPagoInicial
-      ? `<p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Declaraste tu pago como <b>${periodicidadLabel[a.periodicidadPago] || a.periodicidadPago}</b>, desde el ${fmtDate(a.fechaPagoInicial)}.</p>`
+      ? `<p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Tu pago es <b>${periodicidadLabel[a.periodicidadPago] || a.periodicidadPago}</b>, desde el ${fmtDate(a.fechaPagoInicial)}.</p>`
       : `<form data-action="declarar-fecha-pago" data-alumno="${a.id}" class="card" style="margin-bottom:14px;">
           <p style="font-size:.8rem;color:var(--ink-soft);margin-bottom:12px;max-width:60ch;">
-            ¿Ya entrenabas con la academia antes de esta app? Pon la fecha en la que empezaste a
-            pagar (por ejemplo, si pagas cada 15, cualquier 15 anterior sirve). ¿Eres alumno nuevo?
-            Pon la fecha de tu primer pago.
+            Dinos qué día te toca pagar. Por ejemplo, si pagas cada día 15, pon el 15 que
+            te toca (este mes o el próximo). Cada pago aparece como recibido cuando la academia lo confirma.
           </p>
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-            <div class="field" style="margin:0;"><label>¿Desde cuándo pagas?</label><input name="fecha" type="date" required max="${toYMD(new Date())}" /></div>
+            <div class="field" style="margin:0;"><label>¿Qué día te toca pagar?</label><input name="fecha" type="date" required /></div>
             <div class="field" style="margin:0;"><label>¿Cada cuánto pagas?</label>
               <select name="periodicidad"><option value="mensual">Mensual</option><option value="6meses">6 meses</option><option value="anual">Anual</option></select>
             </div>
