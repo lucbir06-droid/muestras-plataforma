@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=48";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=48";
-import { sb } from "./supabase-client.js?v=48";
+import { Store, toYMD } from "./store.js?v=49";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=49";
+import { sb } from "./supabase-client.js?v=49";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=48";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=48" en los imports de arriba son para que el navegador de
+   Los "?v=49" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=48" en el proyecto (app/index.html, store.js e
+   aparezca "?v=49" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -86,16 +86,15 @@ function navVisible(item) {
   return true;
 }
 
-// Los alumnos "de" quien está viendo: el dueño ve a todos; el profe a los
-// que tiene asignados MÁS los que todavía no tienen profe (si no, un alumno
-// sin asignar no le aparecía a nadie y no había forma de hacerle su
-// reporte); el papá/alumno, a los ligados a su cuenta.
-// (Asistencia y check-out NO usan esto: ahí se pasa lista a toda la sede,
-// porque varios profes entrenan al mismo grupo.)
+// Los alumnos "de" quien está viendo: el dueño y el profe ven a TODOS los
+// alumnos activos (antes el profe solo veía a los suyos — Millán pidió que
+// cualquier profe pueda ver a cualquier alumno, por ejemplo en Reportes);
+// el papá/alumno, a los ligados a su cuenta. Lo único que sigue siendo
+// solo del dueño son los datos de pago, gateados aparte con esDueno() en
+// cada pantalla — esta función no cambia eso.
 function misAlumnos() {
   if (esAlumno()) return Store.alumnos();
-  const activos = Store.alumnosActivos();
-  return esDueno() ? activos : activos.filter((a) => !a.coachId || a.coachId === perfil?.id);
+  return Store.alumnosActivos();
 }
 
 function itemDeRuta(path) {
@@ -887,7 +886,7 @@ function Dashboard() {
     ${perfilError ? `<div class="mp-note" style="border-color:var(--crit);background:var(--crit-soft);margin-bottom:20px;"><b>No pudimos cargar tu perfil.</b> Si es la primera vez que se usa esta versión, hay que correr <code>supabase/schema.sql</code> en Supabase (ver README).</div>` : ""}
     ${porAprobar ? `<div class="mp-note" style="margin-bottom:20px;"><b>${porAprobar} profe${porAprobar > 1 ? "s esperan" : " espera"} tu aprobación.</b> <a href="#/duenos" style="color:var(--accent-2)">Revisar →</a></div>` : ""}
     <div class="stats">
-      <div class="card stat"><span class="n">${alumnos.length}</span><span class="l">${esDueno() ? "Alumnos activos" : "Mis alumnos"}</span></div>
+      <div class="card stat"><span class="n">${alumnos.length}</span><span class="l">${esStaff() ? "Alumnos activos" : "Mis alumnos"}</span></div>
       <div class="card stat"><span class="n">${sesionesSemana}</span><span class="l">Sesiones esta semana</span></div>
       <div class="card stat"><span class="n">${asistieronHoy}</span><span class="l">Asistieron hoy</span></div>
       ${esDueno() ? `<div class="card stat"><span class="n">${solicitudes.filter((s) => s.estado === "pendiente").length}</span><span class="l">Solicitudes pendientes</span></div>` : ""}
@@ -910,9 +909,9 @@ function Dashboard() {
     </div>` : ""}
 
     <div class="block">
-      <div class="block-head"><h3>${esDueno() ? "Alumnos recientes" : "Mis alumnos"}</h3><a href="#/alumnos">Ver todos →</a></div>
+      <div class="block-head"><h3>${esStaff() ? "Alumnos recientes" : "Mis alumnos"}</h3><a href="#/alumnos">Ver todos →</a></div>
       <div class="alumno-grid">
-        ${alumnos.length ? alumnos.slice(0, 4).map(alumnoCard).join("") : `<div class="empty">Todavía no hay alumnos${esDueno() ? " — agrega el primero en la sección Alumnos" : " asignados a ti"}.</div>`}
+        ${alumnos.length ? alumnos.slice(0, 4).map(alumnoCard).join("") : `<div class="empty">Todavía no hay alumnos${esDueno() ? " — agrega el primero en la sección Alumnos." : "."}</div>`}
       </div>
     </div>
   `;
@@ -1420,7 +1419,7 @@ function Evidencias() {
         <div class="field"><label>Comentario</label><textarea name="comentario" placeholder="Ej. Entrenamiento de fuerza, 45 min"></textarea></div>
         ${campoFoto({ etiqueta: "Foto", requerida: true })}
         <button class="btn btn-primary btn-sm" type="submit">${icon("i-task")} Subir hábito</button>
-      </form>` : `<div class="empty">${esDueno() ? "Todavía no hay alumnos con Hábitos Premium activo." : "No tienes alumnos con Hábitos Premium activo."}</div>`}
+      </form>` : `<div class="empty">Todavía no hay alumnos con Hábitos Premium activo.</div>`}
     </div>
 
     <div class="block">
@@ -1462,7 +1461,7 @@ function HabitosStaff() {
             ${badge("Premium", "ok")}
           </a>`;
         }).join("")}
-      </div>` : `<div class="empty">${esDueno() ? "Todavía no hay alumnos con Hábitos Premium activo." : "Ninguno de tus alumnos tiene Hábitos Premium activo todavía."}</div>`}
+      </div>` : `<div class="empty">Todavía no hay alumnos con Hábitos Premium activo.</div>`}
     </div>
 
     <div class="block">
@@ -1610,7 +1609,7 @@ function AlumnosList() {
     </div>` : ""}
 
     ${alumnos.length ? Store.SEDES.map((sede) => alumnosPorSede(sede, alumnos)).join("")
-      : `<div class="empty">${esDueno() ? "Todavía no hay alumnos cargados." : "Todavía no tienes alumnos asignados."}</div>`}
+      : `<div class="empty">Todavía no hay alumnos cargados.</div>`}
 
     ${deBaja.length ? `
     <div class="block">
