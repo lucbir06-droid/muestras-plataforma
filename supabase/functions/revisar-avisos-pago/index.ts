@@ -40,6 +40,10 @@ function dia(v: string | Date): Date {
   const s = typeof v === "string" ? v.slice(0, 10) : v.toISOString().slice(0, 10);
   return new Date(`${s}T12:00:00Z`);
 }
+// el día (hora de México) en que cayó un momento exacto, ej. un pago
+function diaMx(v: string | Date): Date {
+  return dia(new Date(v).toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" }));
+}
 function sumarPeriodo(fecha: string | Date, periodicidad: string): Date {
   const d = dia(fecha);
   d.setUTCMonth(d.getUTCMonth() + (periodicidad === "anual" ? 12 : periodicidad === "6meses" ? 6 : 1));
@@ -50,21 +54,23 @@ function toYMD(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-// el día de pago más viejo que todavía no está cubierto por un pago
-// registrado (ver la explicación completa en app.js)
+// la fecha límite de pago pendiente (ver la explicación completa en app.js:
+// las dos tienen que dar siempre lo mismo)
 // deno-lint-ignore no-explicit-any
-function fechaVencimiento(alumno: any, pagos: any[], hoy: Date): Date | null {
-  // lo que fijó el dueño manda: solo cuentan los pagos registrados después
+function fechaVencimiento(alumno: any, todos: any[], hoy: Date): Date | null {
   const fijadaEn = alumno.fecha_pago_fijada_en ? new Date(alumno.fecha_pago_fijada_en).getTime() : 0;
-  const ultimo = pagos
+  const pagos = todos
     .filter((p) => p.alumno_id === alumno.id && p.estado === "pagado" && p.periodicidad
       && (!fijadaEn || new Date(p.registrado_en || p.fecha).getTime() > fijadaEn))
-    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+    .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
   const ancla = alumno.fecha_pago_inicial ? dia(alumno.fecha_pago_inicial) : null;
   const cadaCuanto = alumno.periodicidad_pago || "mensual";
-  if (!ancla) return ultimo ? sumarPeriodo(ultimo.fecha, ultimo.periodicidad) : null;
+  if (!ancla) {
+    const ultimo = pagos[pagos.length - 1];
+    return ultimo ? sumarPeriodo(diaMx(ultimo.fecha), ultimo.periodicidad) : null;
+  }
 
-  const diaDePagoHasta = (tope: Date): Date | null => {
+  const limiteHasta = (tope: Date): Date | null => {
     if (ancla > tope) return null;
     let d = ancla;
     for (let i = 0; i < 600; i++) {
@@ -74,15 +80,25 @@ function fechaVencimiento(alumno: any, pagos: any[], hoy: Date): Date | null {
     }
     return d;
   };
+  const masDias = (d: Date, n: number) => { const r = new Date(d); r.setUTCDate(r.getUTCDate() + n); return r; };
+  const unPeriodoAntes = (d: Date) => {
+    const r = new Date(d);
+    r.setUTCMonth(r.getUTCMonth() - (cadaCuanto === "anual" ? 12 : cadaCuanto === "6meses" ? 6 : 1));
+    return r;
+  };
 
-  if (ultimo) {
-    const tope = dia(ultimo.fecha);
-    tope.setUTCDate(tope.getUTCDate() + 5);
-    const cubierto = diaDePagoHasta(tope);
-    if (!cubierto) return ancla;
-    return sumarPeriodo(cubierto, ultimo.periodicidad);
+  let limite: Date | null = null;
+  for (const p of pagos) {
+    const d = diaMx(p.fecha);
+    const retoma = limite && d > masDias(sumarPeriodo(limite, cadaCuanto), 15);
+    if (limite && !retoma) { limite = sumarPeriodo(limite, p.periodicidad); continue; }
+    const antes: Date = limiteHasta(d) || unPeriodoAntes(ancla);
+    const despues = sumarPeriodo(antes, cadaCuanto);
+    const cubre = d.getTime() - antes.getTime() <= despues.getTime() - d.getTime() ? antes : despues;
+    if (cubre < ancla) continue;
+    limite = sumarPeriodo(cubre, p.periodicidad);
   }
-  return diaDePagoHasta(hoy) || ancla;
+  return limite || limiteHasta(hoy) || ancla;
 }
 
 async function intentarMarcar(alumnoId: string, tipo: string, fechaVenc: string) {
@@ -155,19 +171,24 @@ Deno.serve(async (req) => {
         }
       }
 
-      if (dias === 5 || dias === 3) {
-        const tipo = dias === 5 ? "alumno_5dias" : "alumno_3dias";
+      // al propio papá/alumno: 5 y 3 días antes, y el mismo día límite
+      if (dias === 5 || dias === 3 || dias === 0) {
+        const tipo = dias === 5 ? "alumno_5dias" : dias === 3 ? "alumno_3dias" : "alumno_hoy";
         if (await intentarMarcar(a.id, tipo, toYMD(venc))) {
+          const esHoy = dias === 0;
           await enviarPush(
             a.id,
-            `Tu pago vence en ${dias} días`,
-            `La próxima fecha de pago de ${a.nombre} es el ${fechaLarga}.`,
+            esHoy ? "Hoy es tu fecha límite de pago" : `Tu pago vence en ${dias} días`,
+            esHoy ? `Hoy vence el pago de ${a.nombre}. Si ya pagaste, no hagas caso a este aviso.`
+              : `La fecha límite de pago de ${a.nombre} es el ${fechaLarga}.`,
           ).catch((err) => console.warn("No se pudo mandar la notificación a", a.nombre, err));
           if (a.correo) await enviarCorreo(
             a.correo,
-            `Tu pago vence en ${dias} días — Millán Academy`,
-            `Hola ${a.nombre}!\n\nTu próxima fecha de pago en Millán Academy es el ${fechaLarga} (en ${dias} días).\n\n` +
-              `Podés pagar desde la app, en "Mi suscripción", para no perder el acceso.\n\n— Millán Academy`,
+            esHoy ? "Hoy es tu fecha límite de pago — Millán Academy" : `Tu pago vence en ${dias} días — Millán Academy`,
+            `Hola ${a.nombre}!\n\n` +
+              (esHoy ? `Hoy, ${fechaLarga}, es tu fecha límite de pago en Millán Academy.\n\n`
+                : `Tu fecha límite de pago en Millán Academy es el ${fechaLarga} (en ${dias} días).\n\n`) +
+              `Puedes pagar desde la app, en "Mi suscripción". Si ya pagaste, no hagas caso a este mensaje.\n\n— Millán Academy`,
           ).catch((err) => console.warn("No se pudo avisar por email a", a.nombre, err));
         }
       }

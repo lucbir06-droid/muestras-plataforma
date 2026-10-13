@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=47";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=47";
-import { sb } from "./supabase-client.js?v=47";
+import { Store, toYMD } from "./store.js?v=48";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=48";
+import { sb } from "./supabase-client.js?v=48";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=47";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=47" en los imports de arriba son para que el navegador de
+   Los "?v=48" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=47" en el proyecto (app/index.html, store.js e
+   aparezca "?v=48" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -208,38 +208,39 @@ function diaLocal(v) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-// La "fecha de corte" de un alumno = el día de pago más viejo que todavía
-// NO está cubierto por un pago registrado. Mientras la academia no
-// registre el pago, esa fecha se queda fija (y pasa a "vencida"): la app
-// ya no da por pagado un mes solo porque pasó el tiempo.
+// La FECHA LÍMITE DE PAGO de un alumno: el día en que se le vence lo que
+// todavía no tiene pagado. Ese día aún está a tiempo; al día siguiente
+// aparece como vencido. La app nunca da un mes por pagado solo porque pasó
+// el tiempo: la fecha avanza únicamente cuando se registra un pago.
 //
-//  - "Día de pago" (fechaPagoInicial + periodicidadPago): lo declara el
-//    papá una vez o lo fija/corrige el dueño. Marca los días que le toca
-//    pagar: ese día, y el mismo día de cada mes (o cada 6 meses / año).
-//  - Sin ningún pago registrado: le toca el día de pago más reciente que
-//    ya llegó (ej. día de pago el 1, hoy es 11 de octubre → 1 de octubre,
-//    vencido). Si su primer día de pago todavía no llega, ese.
-//  - Con pagos: el último pago cubre el día de pago que le correspondía
-//    (aunque haya pagado unos días antes o después) y el corte pasa al
-//    siguiente: paga el 5 o el 25 de octubre lo del día 1 → 1 de noviembre.
+//  - Cada alumno tiene su fecha límite (fechaPagoInicial) y cada cuánto se
+//    repite (periodicidadPago): el 10 de octubre, 10 de noviembre…
+//  - Sin pagos registrados: debe la fecha límite más reciente que ya llegó
+//    (o la primera, si todavía no llega).
+//  - Cada pago registrado cubre la fecha límite que estaba pendiente y la
+//    recorre un periodo, pague antes o después: límite el 10, paga el 3 o
+//    el 25 → su siguiente límite es el 10 del mes que sigue.
+//  - El primer pago que se registra cuenta para la fecha límite que le
+//    queda más cerca; de ahí en adelante cada pago recorre la siguiente.
 //  - Si el dueño fija la fecha a mano, esa manda: los pagos cargados antes
-//    de ese momento ya no cuentan (así "10 de octubre" es 10 de octubre).
-//  - Sin día de pago fijado: se cuenta desde la fecha del último pago.
-// null si no hay ni pagos ni día de pago.
+//    de ese momento ya no cuentan.
+//  - Sin fecha límite fijada: se cuenta un periodo desde el último pago.
+// null si no hay ni pagos ni fecha límite.
 function fechaVencimiento(alumnoId) {
   const a = Store.alumno(alumnoId);
-  // Si el dueño fijó la fecha de pago a mano, eso manda: solo cuentan los
-  // pagos registrados DESPUÉS de que la fijó (aunque el pago tenga una fecha
-  // anterior, lo que importa es cuándo se cargó).
   const fijadaEn = a?.fechaPagoFijadaEn ? new Date(a.fechaPagoFijadaEn) : null;
-  const ultimo = Store.pagos().find((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad
-    && (!fijadaEn || new Date(p.registradoEn) > fijadaEn));
+  const pagos = Store.pagos()
+    .filter((p) => p.alumnoId === alumnoId && p.estado === "pagado" && p.periodicidad && (!fijadaEn || new Date(p.registradoEn) > fijadaEn))
+    .sort((x, y) => new Date(x.fecha) - new Date(y.fecha)); // del más viejo al más nuevo
   const ancla = a?.fechaPagoInicial ? diaLocal(a.fechaPagoInicial) : null;
   const cadaCuanto = a?.periodicidadPago || "mensual";
-  if (!ancla) return ultimo ? diaLocal(sumarPeriodo(ultimo.fecha, ultimo.periodicidad)) : null;
+  if (!ancla) {
+    const ultimo = pagos[pagos.length - 1];
+    return ultimo ? diaLocal(sumarPeriodo(ultimo.fecha, ultimo.periodicidad)) : null;
+  }
 
-  // el día de pago más reciente (ancla, ancla + 1 periodo, …) que no pasa de `tope`
-  const diaDePagoHasta = (tope) => {
+  // la fecha límite más reciente (ancla, ancla + 1 periodo, …) que no pasa de `tope`
+  const limiteHasta = (tope) => {
     if (ancla > tope) return null;
     let d = ancla;
     for (let i = 0; i < 600; i++) {
@@ -249,16 +250,25 @@ function fechaVencimiento(alumnoId) {
     }
     return d;
   };
+  const masDias = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+  const unPeriodoAntes = (d) => { const r = new Date(d); r.setMonth(r.getMonth() - (cadaCuanto === "anual" ? 12 : cadaCuanto === "6meses" ? 6 : 1)); return r; };
 
-  if (ultimo) {
-    // 5 días de margen: quien paga un poco antes de su día está pagando ese día
-    const tope = diaLocal(ultimo.fecha);
-    tope.setDate(tope.getDate() + 5);
-    const cubierto = diaDePagoHasta(tope);
-    if (!cubierto) return ancla; // ese pago es anterior al día de pago que se fijó después
-    return diaLocal(sumarPeriodo(cubierto, ultimo.periodicidad));
+  let limite = null; // la fecha límite pendiente después de aplicar cada pago
+  for (const p of pagos) {
+    const dia = diaLocal(p.fecha);
+    // dejó de pagar más de un periodo completo: se retoma desde donde va el calendario
+    const retoma = limite && dia > masDias(sumarPeriodo(limite, cadaCuanto), 15);
+    if (limite && !retoma) { limite = diaLocal(sumarPeriodo(limite, p.periodicidad)); continue; }
+    // primer pago (o el primero al regresar): cuenta para la fecha límite que
+    // le queda MÁS CERCA, antes o después. Límite el 10: quien paga el 3 o
+    // el 20 de octubre está pagando lo del 10 de octubre.
+    const antes = limiteHasta(dia) || unPeriodoAntes(ancla);
+    const despues = diaLocal(sumarPeriodo(antes, cadaCuanto));
+    const cubre = dia - antes <= despues - dia ? antes : despues;
+    if (cubre < ancla) continue; // un pago de antes de que empezara su calendario
+    limite = diaLocal(sumarPeriodo(cubre, p.periodicidad));
   }
-  return diaDePagoHasta(diaLocal(new Date())) || ancla;
+  return limite || limiteHasta(diaLocal(new Date())) || ancla;
 }
 
 function estadoSuscripcion(alumnoId) {
@@ -797,14 +807,16 @@ async function revisarAvisosPagos() {
       }
       // aparte del resumen para Millán, un recordatorio directo al propio
       // alumno/papá (al correo que registraron) a los 5 y a los 3 días
-      if (a.correo && (dias === 5 || dias === 3)) {
-        const tipo = dias === 5 ? "alumno_5dias" : "alumno_3dias";
+      if (a.correo && (dias === 5 || dias === 3 || dias === 0)) {
+        const tipo = dias === 5 ? "alumno_5dias" : dias === 3 ? "alumno_3dias" : "alumno_hoy";
         if (await Store.intentarMarcarRecordatorio(a.id, tipo, toYMD(venc))) {
           await notificarEmail({
             to: a.correo,
-            subject: `Tu pago vence en ${dias} días — Millán Academy`,
-            message: `Hola ${a.nombre}!\n\nTu próxima fecha de pago en Millán Academy es el ${fmtDateLong(venc)} (en ${dias} días).\n\n` +
-              `Podés pagar desde la app, en "Mi suscripción", para no perder el acceso.\n\n— Millán Academy`,
+            subject: dias === 0 ? "Hoy es tu fecha límite de pago — Millán Academy" : `Tu pago vence en ${dias} días — Millán Academy`,
+            message: `Hola ${a.nombre}!\n\n` +
+              (dias === 0 ? `Hoy, ${fmtDateLong(venc)}, es tu fecha límite de pago en Millán Academy.\n\n`
+                : `Tu fecha límite de pago en Millán Academy es el ${fmtDateLong(venc)} (en ${dias} días).\n\n`) +
+              `Puedes pagar desde la app, en "Mi suscripción". Si ya pagaste, no hagas caso a este mensaje.\n\n— Millán Academy`,
           }).catch((err) => console.warn("No se pudo avisar por email a", a.nombre, err));
         }
       }
@@ -2261,6 +2273,23 @@ function Pagos() {
     </div>
 
     <div class="block">
+      <details class="card panel">
+        <summary style="cursor:pointer;font-family:var(--display);font-weight:600;font-size:.85rem;letter-spacing:.02em;text-transform:uppercase;color:var(--ink);">
+          Poner el mismo día límite a todos
+        </summary>
+        <form data-action="dia-limite-todos" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:16px;">
+          <div class="field" style="margin:0;"><label>Todos pagan a más tardar el día</label>
+            <input name="dia" type="number" min="1" max="28" value="10" required style="max-width:110px;" /></div>
+          <button class="btn btn-ghost btn-sm" type="submit">Aplicar a todos</button>
+        </form>
+        <p style="font-size:.76rem;color:var(--muted);margin-top:12px;">
+          Cambia la fecha límite de pago de todos los alumnos activos a ese día de cada mes. No borra pagos: quien ya pagó este mes
+          queda al corriente. Los que no tengan pago registrado aparecen como vencidos al día siguiente del límite.
+        </p>
+      </details>
+    </div>
+
+    <div class="block">
       <div class="block-head"><h3>Movimientos</h3></div>
       <div class="card scrollx">
         ${pagos.length ? `
@@ -2981,6 +3010,14 @@ view.addEventListener("submit", async (e) => {
     } else if (action === "declarar-fecha-pago") {
       await Store.declararFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
       toast("Fecha de pago guardada");
+    } else if (action === "dia-limite-todos") {
+      const dia = Math.min(28, Math.max(1, Number(data.dia) || 10));
+      const hoy = new Date();
+      const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+      const cuantos = Store.alumnosActivos().length;
+      if (!confirm(`¿Poner el día ${dia} de cada mes como fecha límite de pago de los ${cuantos} alumnos activos?\n\nEmpieza este mes (${fmtDateLong(fecha)}). No borra pagos.`)) return;
+      await Store.fijarDiaLimiteATodos(fecha);
+      toast(`Listo — todos pagan a más tardar el día ${dia}`);
     } else if (action === "corregir-fecha-pago") {
       await Store.corregirFechaPago(form.dataset.alumno, data.fecha, data.periodicidad);
       const corte = fechaVencimiento(form.dataset.alumno);

@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=47";
+import { sb } from "./supabase-client.js?v=48";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -265,6 +265,21 @@ export const Store = {
       ({ error } = await sb.from("alumnos").update(base).eq("id", alumnoId));
     }
     if (error) throw error;
+    await cargar("alumnos");
+  },
+  // Pone el mismo día del mes como fecha límite a TODOS los alumnos activos
+  // (ej. "todos pagan a más tardar el 10"). A diferencia de corregir uno por
+  // uno, esto NO descarta los pagos ya registrados: quien pagó este mes
+  // sigue al corriente y su siguiente límite es el mes que viene.
+  async fijarDiaLimiteATodos(fechaYMD) {
+    let { error } = await sb.from("alumnos")
+      .update({ fecha_pago_inicial: fechaYMD, fecha_pago_fijada_en: null }).eq("activo", true);
+    if (error && /fecha_pago_fijada_en/.test(error.message || "")) {
+      ({ error } = await sb.from("alumnos").update({ fecha_pago_inicial: fechaYMD }).eq("activo", true));
+    }
+    if (error) throw error;
+    const r2 = await sb.from("alumnos").update({ periodicidad_pago: "mensual" }).eq("activo", true).is("periodicidad_pago", null);
+    if (r2.error) throw r2.error;
     await cargar("alumnos");
   },
   // dar de baja / reactivar sin borrar nada (historial, pagos, evidencias
