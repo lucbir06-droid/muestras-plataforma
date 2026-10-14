@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=49";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=49";
-import { sb } from "./supabase-client.js?v=49";
+import { Store, toYMD } from "./store.js?v=50";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=50";
+import { sb } from "./supabase-client.js?v=50";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=49";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=49" en los imports de arriba son para que el navegador de
+   Los "?v=50" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=49" en el proyecto (app/index.html, store.js e
+   aparezca "?v=50" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -952,7 +952,11 @@ function alumnoCard(a) {
           <div class="meta">${esc(a.categoria)} · ${esc(a.sedes.join(" / "))}</div>
         </div>
       </div>
-      ${rol() === "profe" ? `<div class="meta" style="margin-top:8px;">${a.coachId ? badge("Tu alumno", "ok") : badge("Sin profe asignado", "muted")}</div>` : ""}
+      ${rol() === "profe" ? `<div class="meta" style="margin-top:8px;">${
+        !a.coachId ? badge("Sin profe asignado", "muted")
+        : a.coachId === perfil.id ? badge("Tu alumno", "ok")
+        : badge(`Profe: ${a.coach || "otro"}`, "muted")
+      }</div>` : ""}
       ${sus ? `<div class="meta" style="margin-top:8px;">${badge(sus.vence ? (sus.kind === "crit" ? `Venció ${fmtDate(sus.vence)}` : `Límite: ${fmtDate(sus.vence)}`) : sus.texto, sus.kind)}</div>` : ""}
       ${top ? `
         <div class="goal">
@@ -1655,10 +1659,6 @@ function alumnosPorSede(sede, alumnos) {
 function AlumnoDetail(id) {
   const a = Store.alumno(id);
   if (!a) return `<div class="empty">No encontramos este alumno. <a href="#/${esStaff() ? "alumnos" : ""}" style="color:var(--accent-2)">Volver</a>.</div>`;
-  // un profe solo abre la ficha de sus alumnos asignados
-  if (rol() === "profe" && a.coachId && a.coachId !== perfil.id) {
-    return `<div class="empty">${esc(a.nombre)} está asignado a otro profe. <a href="#/alumnos" style="color:var(--accent-2)">Ver mis alumnos</a>.</div>`;
-  }
 
   const staff = esStaff();
   const bitacora = Store.bitacoraDe(id);
