@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=51";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=51";
-import { sb } from "./supabase-client.js?v=51";
+import { Store, toYMD } from "./store.js?v=52";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=52";
+import { sb } from "./supabase-client.js?v=52";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=51";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=51" en los imports de arriba son para que el navegador de
+   Los "?v=52" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=51" en el proyecto (app/index.html, store.js e
+   aparezca "?v=52" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -707,6 +707,11 @@ const Push = window.Capacitor?.getPlatform?.() === "ios" ? window.Capacitor.regi
 // a la última versión que sí funcionaba — por eso se llama recién después
 // del primer render exitoso (ver init() más abajo), nunca antes.
 const Updater = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.registerPlugin("CapacitorUpdater") : null;
+
+// Apple Salud / Health Connect (HealthKit): solo existe en la app nativa.
+// Es parte de Hábitos Premium — cada alumno conecta su propio reloj desde
+// su cuenta (ver sincronizarAppleSalud más abajo).
+const HealthKit = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.registerPlugin("Health") : null;
 
 let pushToken = null;      // el "número" de este teléfono para Apple/Google
 let pushUsuario = null;    // a qué cuenta está registrado ahora
@@ -1405,6 +1410,86 @@ function Asistencia() {
    a mano desde la ficha del alumno cuando confirma el cobro (ver
    AlumnoDetail / cambiarHabitosPremium). */
 
+// Pide permiso de Apple Salud / Health Connect y trae calorías, pasos,
+// sueño (últimos 7 días) y entrenamientos (últimos 30) al alumno indicado.
+// Cada tipo de dato va en su propio try/catch: si uno falla (ej. el reloj
+// no tiene datos de sueño todavía), los demás se guardan igual.
+async function sincronizarAppleSalud(alumnoId) {
+  if (!HealthKit) throw new Error("Apple Salud solo está disponible desde la app del celular");
+  const disponible = await HealthKit.isAvailable();
+  if (!disponible.available) throw new Error("Este dispositivo no tiene Salud/Health Connect disponible");
+
+  await HealthKit.requestAuthorization({ read: ["steps", "calories", "sleep", "workouts"] });
+
+  const hoy = new Date();
+  const desde = new Date(hoy.getTime() - 7 * 86400000);
+  const diarios = [];
+
+  for (const [hkTipo, tipo] of [["steps", "pasos"], ["calories", "calorias"]]) {
+    try {
+      const { samples } = await HealthKit.queryAggregated({
+        dataType: hkTipo, startDate: desde.toISOString(), endDate: hoy.toISOString(), bucket: "day", aggregation: "sum",
+      });
+      for (const s of samples) if (s.value) diarios.push({ tipo, fecha: toYMD(new Date(s.startDate)), valor: Math.round(s.value) });
+    } catch (err) { console.warn(`No se pudo leer "${hkTipo}" de Salud:`, err); }
+  }
+
+  // el sueño no se puede agregar por día directo (ver docs del plugin) — se
+  // suma a mano, en minutos, sin contar los tramos "despierto"/"en la cama"
+  try {
+    const { samples } = await HealthKit.readSamples({ dataType: "sleep", startDate: desde.toISOString(), endDate: hoy.toISOString(), limit: 500 });
+    const porDia = new Map();
+    for (const s of samples) {
+      if (s.sleepState === "awake" || s.sleepState === "inBed") continue;
+      const dia = toYMD(new Date(s.startDate));
+      const minutos = (new Date(s.endDate) - new Date(s.startDate)) / 60000;
+      porDia.set(dia, (porDia.get(dia) || 0) + minutos);
+    }
+    for (const [fecha, minutos] of porDia) diarios.push({ tipo: "sueno", fecha, valor: Math.round(minutos) });
+  } catch (err) { console.warn("No se pudo leer el sueño de Salud:", err); }
+
+  let entrenamientos = [];
+  try {
+    const desdeEntrenos = new Date(hoy.getTime() - 30 * 86400000);
+    const { workouts } = await HealthKit.queryWorkouts({ startDate: desdeEntrenos.toISOString(), endDate: hoy.toISOString(), limit: 50 });
+    entrenamientos = workouts.map((w) => ({
+      fecha: toYMD(new Date(w.startDate)),
+      valor: Math.round(w.duration / 60),
+      detalle: w.workoutType,
+      platformId: w.platformId || `${w.startDate}|${w.workoutType}`,
+    }));
+  } catch (err) { console.warn("No se pudieron leer los entrenamientos de Salud:", err); }
+
+  await Store.sincronizarSalud(alumnoId, diarios, entrenamientos);
+}
+
+// resumen de lo último que llegó de Apple Salud/Health Connect para un
+// alumno: promedio diario de pasos/calorías/sueño (últimos días sincronizados)
+// y sus entrenamientos más recientes
+function resumenSalud(datos) {
+  if (!datos.length) return "";
+  const porTipo = (tipo) => datos.filter((d) => d.tipo === tipo);
+  const promedio = (arr) => (arr.length ? Math.round(arr.reduce((s, d) => s + d.valor, 0) / arr.length) : null);
+  const pasos = promedio(porTipo("pasos"));
+  const calorias = promedio(porTipo("calorias"));
+  const sueno = promedio(porTipo("sueno"));
+  const entrenos = porTipo("entrenamiento").slice(0, 5);
+  return `
+    <div class="block">
+      <div class="block-head"><h3>Apple Salud</h3></div>
+      <div class="stats">
+        ${pasos !== null ? `<div class="card stat"><span class="n">${pasos.toLocaleString("es-MX")}</span><span class="l">Pasos · promedio diario</span></div>` : ""}
+        ${calorias !== null ? `<div class="card stat"><span class="n">${calorias}</span><span class="l">Calorías · promedio diario</span></div>` : ""}
+        ${sueno !== null ? `<div class="card stat"><span class="n">${Math.floor(sueno / 60)}h ${sueno % 60}m</span><span class="l">Sueño · promedio</span></div>` : ""}
+      </div>
+      ${entrenos.length ? `
+      <div class="list" style="margin-top:12px;">
+        ${entrenos.map((e) => `
+          <div class="row-card"><div class="grow"><div class="row-title">${esc(e.detalle || "Entrenamiento")}</div><div class="row-sub">${fmtDate(e.fecha)} · ${e.valor} min</div></div></div>`).join("")}
+      </div>` : ""}
+    </div>`;
+}
+
 function Evidencias() {
   const alumnos = Store.alumnos();
   const evidencias = Store.evidencias();
@@ -1422,6 +1507,14 @@ function Evidencias() {
         <b>entrenamiento</b>, <b>recuperación</b> o <b>nutrición</b>. Queda guardado con
         foto, fecha y comentario para que el profe lo revise.
       </p>
+      ${window.Capacitor?.isNativePlatform?.() ? alumnosPremium.map((a) => `
+        <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+          <div class="grow">
+            <div class="row-title" style="font-size:.92rem;">Apple Salud${alumnosPremium.length > 1 ? ` · ${esc(a.nombre)}` : ""}</div>
+            <div class="row-sub">Trae calorías, sueño, pasos y entrenamientos de tu reloj.</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" type="button" data-action="sincronizar-salud" data-alumno="${a.id}">Conectar / sincronizar</button>
+        </div>`).join("") : ""}
       ${alumnosPremium.length ? `
       <form class="card" data-action="evidencia" style="max-width:460px;">
         <div class="field"><label>Alumno</label>
@@ -1675,6 +1768,7 @@ function AlumnoDetail(id) {
   const proxima = reservas.find((r) => parseFecha(r.fecha) >= new Date(new Date().toDateString()));
   const asistencias = Store.asistenciasAlumno(id).slice().sort((x, y) => y.fecha.localeCompare(x.fecha)).slice(0, 8);
   const evidencias = Store.evidenciasDe(id);
+  const datosSalud = Store.datosSaludDe(id);
   const ev = a.evaluacion || { tactica: 0, tecnica: 0, fisico: 0, comentarios: "" };
   const sus = estadoSuscripcion(id);
 
@@ -1851,6 +1945,8 @@ function AlumnoDetail(id) {
         <div class="block-head"><h3>Reservas</h3></div>
         <div class="list">${reservas.map(reservaRow).join("")}</div>
       </div>` : ""}
+
+    ${resumenSalud(datosSalud)}
 
     <div class="block">
       <div class="block-head"><h3>Hábitos</h3><a href="#/evidencias">Ver más →</a></div>
@@ -3377,6 +3473,18 @@ view.addEventListener("click", async (e) => {
       if (!confirm(`${quitarHabitosBtn.dataset.nombre} deja de poder subir hábitos nuevos. Lo que ya subió no se borra. ¿Quitar Hábitos Premium?`)) return;
       await Store.cambiarHabitosPremium(quitarHabitosBtn.dataset.id, false);
       toast(`Hábitos Premium desactivado para ${quitarHabitosBtn.dataset.nombre}`);
+      render();
+    }
+    const saludBtn = e.target.closest("[data-action='sincronizar-salud']");
+    if (saludBtn) {
+      saludBtn.disabled = true;
+      toast("Pidiendo permiso y trayendo datos de Salud…");
+      try {
+        await sincronizarAppleSalud(saludBtn.dataset.alumno);
+        toast("Apple Salud sincronizada");
+      } finally {
+        saludBtn.disabled = false;
+      }
       render();
     }
   } catch (err) {

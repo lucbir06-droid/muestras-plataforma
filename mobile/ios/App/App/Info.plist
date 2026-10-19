@@ -8,6 +8,10 @@
 	<string>La app usa la cámara para tomar la foto de llegada del profe (check-in) y las fotos de evidencia de los alumnos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>La app te deja elegir una foto de tu galería para el check-in o para subir una evidencia.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Millán Academy lee tus calorías, sueño, pasos y entrenamientos de Salud para que tu profe pueda ver tu progreso físico junto con tus hábitos.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Millán Academy no escribe datos en Salud — esto queda sin usar.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>

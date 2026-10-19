@@ -430,6 +430,29 @@ create table if not exists public.evidencias (
 alter table public.evidencias add column if not exists alumno_id uuid references public.alumnos(id) on delete cascade;
 alter table public.evidencias add column if not exists user_id uuid default auth.uid();
 
+-- Datos de Apple Salud / Health Connect que el alumno sincroniza desde su
+-- reloj (calorías, sueño, pasos y entrenamientos) — parte de Hábitos
+-- Premium, ver HealthKit en app.js. "calorias"/"sueno"/"pasos" son un
+-- agregado por día (se pisa solo si ya existía ese día); "entrenamiento" es
+-- una fila por sesión real, identificada por platform_id (el id que les da
+-- HealthKit/Health Connect) para no duplicar si se sincroniza dos veces.
+create table if not exists public.datos_salud (
+  id uuid primary key default gen_random_uuid(),
+  alumno_id uuid not null references public.alumnos(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
+  tipo text not null check (tipo in ('calorias', 'sueno', 'pasos', 'entrenamiento')),
+  fecha date not null,
+  valor numeric not null,
+  detalle text,
+  platform_id text,
+  fuente text not null default 'Apple Health',
+  creado_en timestamptz not null default now()
+);
+create unique index if not exists datos_salud_diario_key
+  on public.datos_salud (alumno_id, fecha, tipo) where tipo <> 'entrenamiento';
+create unique index if not exists datos_salud_entrenamiento_key
+  on public.datos_salud (alumno_id, platform_id) where platform_id is not null;
+
 -- Chat: canales por categoría (1ra/2da/3ra/4ta división, abiertos a toda la
 -- academia) y mensajes directos alumno/papá <-> profe (sobre un alumno puntual).
 -- El nombre y rol del autor se guardan en el mensaje (igual que en checkins/
@@ -648,9 +671,12 @@ create policy "objetivos editar" on public.objetivos_categoria for update to aut
 create policy "objetivos borrar" on public.objetivos_categoria for delete to authenticated
   using (public.es_staff());
 
--- evidencias: las sube el alumno/papá (o el staff a nombre de un alumno)
+-- evidencias: las sube el alumno/papá (o el staff a nombre de un alumno).
+-- "es_staff()" además de puede_ver_alumno(): cualquier profe ve los hábitos
+-- de cualquier alumno, no solo los suyos asignados (mismo criterio que
+-- alumnos/bitácora/asistencia — ver el comentario arriba de "alumnos ver").
 create policy "evidencias ver" on public.evidencias for select to authenticated
-  using (user_id = auth.uid() or (alumno_id is not null and public.puede_ver_alumno(alumno_id)));
+  using (user_id = auth.uid() or public.es_staff() or (alumno_id is not null and public.puede_ver_alumno(alumno_id)));
 create policy "evidencias crear" on public.evidencias for insert to authenticated
   with check (user_id = auth.uid() and (alumno_id is null or public.puede_ver_alumno(alumno_id)));
 create policy "evidencias borrar" on public.evidencias for delete to authenticated
@@ -658,6 +684,18 @@ create policy "evidencias borrar" on public.evidencias for delete to authenticat
 -- el staff le deja su comentario a un hábito
 create policy "evidencias comentar" on public.evidencias for update to authenticated
   using (public.es_staff()) with check (public.es_staff());
+
+-- datos de salud: los sincroniza el propio alumno/papá desde su reloj; los
+-- ve ese mismo alumno/papá o cualquiera del staff (igual criterio que
+-- evidencias — ver arriba).
+alter table public.datos_salud enable row level security;
+create policy "datos_salud ver" on public.datos_salud for select to authenticated
+  using (public.es_staff() or public.puede_ver_alumno(alumno_id));
+create policy "datos_salud escribir" on public.datos_salud for insert to authenticated
+  with check (user_id = auth.uid() and public.puede_ver_alumno(alumno_id));
+create policy "datos_salud actualizar" on public.datos_salud for update to authenticated
+  using (user_id = auth.uid() and public.puede_ver_alumno(alumno_id))
+  with check (user_id = auth.uid() and public.puede_ver_alumno(alumno_id));
 
 -- chat: los canales por categoría los ve y escribe el staff (todos) o un
 -- alumno/papá que tenga un alumno propio en esa sede+división exacta —

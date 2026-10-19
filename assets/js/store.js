@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=51";
+import { sb } from "./supabase-client.js?v=52";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -74,7 +74,7 @@ function proximaFecha(diaNombre, semanasAdelante) {
 const C = {
   alumnos: [], bitacora: [], reservas: [], pagos: [], checkins: [], asistencias: [],
   evidencias: [], solicitudes: [], inscripciones: [], objetivos: [], perfiles: [], mensajes: [],
-  bloqueos: [], reportes: [],
+  bloqueos: [], reportes: [], datosSalud: [],
 };
 
 const urlFoto = (bucket, path) => (path ? sb.storage.from(bucket).getPublicUrl(path).data.publicUrl : null);
@@ -130,6 +130,10 @@ const mapMensaje = (r) => ({
   id: r.id, tipo: r.tipo, sede: r.sede, categoria: r.categoria, profeId: r.profe_id, alumnoId: r.alumno_id,
   autorId: r.autor_id, autorNombre: r.autor_nombre, autorRol: r.autor_rol, contenido: r.contenido, fecha: r.creado_en,
 });
+const mapDatoSalud = (r) => ({
+  id: r.id, alumnoId: r.alumno_id, tipo: r.tipo, fecha: r.fecha, valor: Number(r.valor),
+  detalle: r.detalle, platformId: r.platform_id, fuente: r.fuente,
+});
 
 const TABLAS = {
   alumnos:       { tabla: "alumnos",             orden: ["alta", false],   map: mapAlumno },
@@ -144,6 +148,7 @@ const TABLAS = {
   objetivos:     { tabla: "objetivos_categoria", orden: ["fecha", false],  map: mapObjetivo },
   perfiles:      { tabla: "perfiles",            orden: ["creado_en", true], map: mapPerfil },
   mensajes:      { tabla: "mensajes",            orden: ["creado_en", true], map: mapMensaje },
+  datosSalud:    { tabla: "datos_salud",         orden: ["fecha", true],   map: mapDatoSalud },
   bloqueos:      { tabla: "bloqueos",            orden: ["creado_en", false], map: (r) => ({ id: r.bloqueado_id, nombre: r.bloqueado_nombre }) },
   // solo le llegan al dueño (los demás reciben la lista vacía por RLS)
   reportes:      { tabla: "reportes_mensajes",   orden: ["creado_en", false], map: (r) => ({
@@ -541,6 +546,33 @@ export const Store = {
     }
     await insertar("evidencias", { alumno_id: alumnoId, alumno_nombre: alumnoNombre, tipo, comentario, foto_path: fotoPath });
     await cargar("evidencias");
+  },
+
+  /* ---- datos de salud (Apple Salud / Health Connect, vía HealthKit) ---- */
+  datosSaludDe(alumnoId) {
+    return C.datosSalud.filter((d) => d.alumnoId === alumnoId).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  },
+  // guarda los agregados diarios (calorías, sueño, pasos) y los entrenamientos
+  // que llegan del reloj. Los diarios se pisan solos si ya existía ese
+  // (alumno, fecha, tipo) — por eso un re-sync del mismo día no duplica.
+  // Los entrenamientos se identifican por platformId (el id que les da
+  // HealthKit/Health Connect) para tampoco duplicarlos entre syncs.
+  async sincronizarSalud(alumnoId, diarios, entrenamientos) {
+    if (diarios.length) {
+      const { error } = await sb.from("datos_salud")
+        .upsert(diarios.map((d) => ({ alumno_id: alumnoId, tipo: d.tipo, fecha: d.fecha, valor: d.valor, fuente: "Apple Health" })),
+          { onConflict: "alumno_id,fecha,tipo" });
+      if (error) throw error;
+    }
+    if (entrenamientos.length) {
+      const { error } = await sb.from("datos_salud")
+        .upsert(entrenamientos.map((w) => ({
+          alumno_id: alumnoId, tipo: "entrenamiento", fecha: w.fecha, valor: w.valor,
+          detalle: w.detalle, platform_id: w.platformId, fuente: "Apple Health",
+        })), { onConflict: "alumno_id,platform_id" });
+      if (error) throw error;
+    }
+    await cargar("datosSalud");
   },
 
   /* ---- chat (canales por sede+categoría + mensajes directos con un profe) ---- */
