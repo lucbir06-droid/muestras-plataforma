@@ -9,6 +9,11 @@
         "sound",
         "alert"
       ]
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": true,
+      "defaultChannel": "production",
+      "version": "1.0.1"
     }
   }
 }

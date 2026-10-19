@@ -54,6 +54,42 @@ npm run open:ios
 ```
 abre el proyecto en Xcode.
 
+## Actualizaciones en vivo (Capgo) — sin pasar por Apple/Google cada vez
+
+La app nativa normalmente es una "foto" congelada del código del día que se
+compiló — si cambiamos algo en `app.js` después, el sitio web lo tiene al
+instante pero la app de la tienda se queda atrás hasta la próxima subida
+(que Apple puede tardar horas/días en aprobar). Para que no pase eso,
+[Capgo](https://capgo.app) manda el código nuevo a las apps ya instaladas
+sin pasar por revisión — los usuarios lo reciben solo, sin tener que
+actualizar desde la tienda.
+
+**Cómo se manda una actualización** (después de cualquier cambio en `app/`
+o `assets/`):
+
+```bash
+cd mobile
+npm run sync
+npx @capgo/cli@latest bundle upload --channel production --self-assign --auto-bump patch --auto-set-bundle
+```
+
+Eso sube el código nuevo al canal `production` — las apps instaladas lo
+bajan solas la próxima vez que se abren. `CapacitorUpdater.notifyAppReady()`
+se llama al final de `init()` en `app.js`: si una actualización rompe algo y
+la app nunca llega a confirmar que cargó bien, Capgo la revierte sola a la
+última versión que sí funcionaba.
+
+**Importante:** esto solo actualiza el código web (HTML/CSS/JS). Un cambio
+que toque algo **nativo** de verdad — un plugin nuevo, un permiso nuevo
+(como HealthKit), el ícono, etc. — sigue necesitando un build nuevo en
+Codemagic y pasar por la revisión de la tienda, porque ahí sí cambia el
+binario, no solo el contenido web que corre adentro.
+
+**Cuenta:** la organización es `millanacademy` en capgo.app (plan Solo).
+Revisar `console.capgo.app/settings/organization/plans` antes de que
+termine el período de prueba, o las actualizaciones se cortan hasta que se
+cargue una forma de pago.
+
 ## Próximos pasos recomendados
 
 - **Notificaciones push** — hoy la app no manda ninguna. Ayuda mucho a que

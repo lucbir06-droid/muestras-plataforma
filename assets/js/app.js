@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=50";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=50";
-import { sb } from "./supabase-client.js?v=50";
+import { Store, toYMD } from "./store.js?v=51";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=51";
+import { sb } from "./supabase-client.js?v=51";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=50";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=50" en los imports de arriba son para que el navegador de
+   Los "?v=51" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=50" en el proyecto (app/index.html, store.js e
+   aparezca "?v=51" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -700,6 +700,14 @@ async function route() {
 // Por ahora solo iPhone: en Android el plugin necesita Firebase configurado
 // (google-services.json) y sin eso la app se cierra al pedir el registro.
 const Push = window.Capacitor?.getPlatform?.() === "ios" ? window.Capacitor.registerPlugin("PushNotifications") : null;
+
+// Capgo (actualizaciones en vivo): le manda el código nuevo a la app ya
+// instalada sin pasar por la revisión de Apple/Google cada vez. Si esto NO
+// se llama, Capgo entiende que la actualización rompió algo y revierte sola
+// a la última versión que sí funcionaba — por eso se llama recién después
+// del primer render exitoso (ver init() más abajo), nunca antes.
+const Updater = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.registerPlugin("CapacitorUpdater") : null;
+
 let pushToken = null;      // el "número" de este teléfono para Apple/Google
 let pushUsuario = null;    // a qué cuenta está registrado ahora
 let pushEscuchando = false;
@@ -842,6 +850,7 @@ async function init() {
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) logoutBtn.addEventListener("click", cerrarSesion);
   route();
+  Updater?.notifyAppReady().catch((err) => console.warn("Capgo notifyAppReady:", err));
 }
 
 window.addEventListener("hashchange", route);
