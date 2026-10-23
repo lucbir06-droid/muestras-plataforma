@@ -56,6 +56,12 @@ workflows:
           cd ios/App
           LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_CONNECT_APP_ID" || echo 0)
           agvtool new-version -all $((LATEST + 1))
+      # Esto NO sube solo el número de versión que ve la gente (MARKETING_VERSION
+      # en ios/App/App.xcodeproj/project.pbxproj, ej. "1.1") — ese hay que
+      # subirlo a mano antes de cada subida real a App Store/TestFlight que
+      # vaya a pasar por revisión (Apple rechaza con el error 90062 si no es
+      # mayor al de la última versión aprobada). Las actualizaciones que solo
+      # van por Capgo (sin cambios nativos) no necesitan esto.
       - name: Compilar el .ipa
         script: |
           xcode-project build-ipa \
