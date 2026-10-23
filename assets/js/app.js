@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=52";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=52";
-import { sb } from "./supabase-client.js?v=52";
+import { Store, toYMD } from "./store.js?v=53";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=53";
+import { sb } from "./supabase-client.js?v=53";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=52";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=52" en los imports de arriba son para que el navegador de
+   Los "?v=53" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=52" en el proyecto (app/index.html, store.js e
+   aparezca "?v=53" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -711,7 +711,15 @@ const Updater = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.regist
 // Apple Salud / Health Connect (HealthKit): solo existe en la app nativa.
 // Es parte de Hábitos Premium — cada alumno conecta su propio reloj desde
 // su cuenta (ver sincronizarAppleSalud más abajo).
-const HealthKit = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.registerPlugin("Health") : null;
+//
+// HEALTHKIT_LISTO queda en false hasta que el capability de HealthKit esté
+// activado en Apple Developer y vuelva a agregarse al entitlements/Info.plist
+// de iOS (se sacó para no bloquear la subida de Capgo). Sin el permiso de
+// Salud declarado en iOS, pedir autorización puede cerrar la app de golpe
+// en vez de solo mostrar un error — por eso el botón queda escondido, no
+// solo deshabilitado. Cambiar a "true" cuando se vuelva a agregar.
+const HEALTHKIT_LISTO = false;
+const HealthKit = HEALTHKIT_LISTO && window.Capacitor?.isNativePlatform?.() ? window.Capacitor.registerPlugin("Health") : null;
 
 let pushToken = null;      // el "número" de este teléfono para Apple/Google
 let pushUsuario = null;    // a qué cuenta está registrado ahora
@@ -1507,7 +1515,7 @@ function Evidencias() {
         <b>entrenamiento</b>, <b>recuperación</b> o <b>nutrición</b>. Queda guardado con
         foto, fecha y comentario para que el profe lo revise.
       </p>
-      ${window.Capacitor?.isNativePlatform?.() ? alumnosPremium.map((a) => `
+      ${HealthKit ? alumnosPremium.map((a) => `
         <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
           <div class="grow">
             <div class="row-title" style="font-size:.92rem;">Apple Salud${alumnosPremium.length > 1 ? ` · ${esc(a.nombre)}` : ""}</div>
