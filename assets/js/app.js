@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=53";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=53";
-import { sb } from "./supabase-client.js?v=53";
+import { Store, toYMD } from "./store.js?v=54";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=54";
+import { sb } from "./supabase-client.js?v=54";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=53";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=53" en los imports de arriba son para que el navegador de
+   Los "?v=54" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=53" en el proyecto (app/index.html, store.js e
+   aparezca "?v=54" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -712,13 +712,9 @@ const Updater = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.regist
 // Es parte de Hábitos Premium — cada alumno conecta su propio reloj desde
 // su cuenta (ver sincronizarAppleSalud más abajo).
 //
-// HEALTHKIT_LISTO queda en false hasta que el capability de HealthKit esté
-// activado en Apple Developer y vuelva a agregarse al entitlements/Info.plist
-// de iOS (se sacó para no bloquear la subida de Capgo). Sin el permiso de
-// Salud declarado en iOS, pedir autorización puede cerrar la app de golpe
-// en vez de solo mostrar un error — por eso el botón queda escondido, no
-// solo deshabilitado. Cambiar a "true" cuando se vuelva a agregar.
-const HEALTHKIT_LISTO = false;
+// HealthKit ya está activado en Apple Developer y de vuelta en el
+// entitlements/Info.plist de iOS.
+const HEALTHKIT_LISTO = true;
 const HealthKit = HEALTHKIT_LISTO && window.Capacitor?.isNativePlatform?.() ? window.Capacitor.registerPlugin("Health") : null;
 
 let pushToken = null;      // el "número" de este teléfono para Apple/Google
