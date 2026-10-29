@@ -392,7 +392,7 @@ create table if not exists public.recordatorios_enviados (
 -- (al correo que registraron), aparte del resumen que recibe Millán.
 alter table public.recordatorios_enviados drop constraint if exists recordatorios_enviados_tipo_check;
 alter table public.recordatorios_enviados add constraint recordatorios_enviados_tipo_check
-  check (tipo in ('por_vencer', 'vencido', 'alumno_5dias', 'alumno_3dias'));
+  check (tipo in ('por_vencer', 'vencido', 'alumno_5dias', 'alumno_3dias', 'alumno_hoy'));
 
 -- Check-in (llegada, con foto) y check-out (salida, con resumen)
 create table if not exists public.checkins (
@@ -866,8 +866,3 @@ alter table public.alumnos add column if not exists fecha_pago_fijada_en timesta
 alter table public.pagos add column if not exists registrado_en timestamptz;
 update public.pagos set registrado_en = fecha where registrado_en is null;
 alter table public.pagos alter column registrado_en set default now();
-
--- aviso al papá/alumno el mismo día de su fecha límite de pago
-alter table public.recordatorios_enviados drop constraint if exists recordatorios_enviados_tipo_check;
-alter table public.recordatorios_enviados add constraint recordatorios_enviados_tipo_check
-  check (tipo in ('por_vencer', 'vencido', 'alumno_5dias', 'alumno_3dias', 'alumno_hoy'));
