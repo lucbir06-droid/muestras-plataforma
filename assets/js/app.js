@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=55";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=55";
-import { sb } from "./supabase-client.js?v=55";
+import { Store, toYMD } from "./store.js?v=56";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=56";
+import { sb } from "./supabase-client.js?v=56";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=55";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=55" en los imports de arriba son para que el navegador de
+   Los "?v=56" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=55" en el proyecto (app/index.html, store.js e
+   aparezca "?v=56" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -714,8 +714,13 @@ const Updater = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.regist
 //
 // HealthKit ya está activado en Apple Developer y de vuelta en el
 // entitlements/Info.plist de iOS.
+//
+// isPluginAvailable: este código también les llega por Capgo a las apps
+// instaladas antes de la 1.2, que no traen el plugin — ahí el botón daría
+// '"Health" plugin is not implemented on ios'. Sin plugin, no se muestra.
 const HEALTHKIT_LISTO = true;
-const HealthKit = HEALTHKIT_LISTO && window.Capacitor?.isNativePlatform?.() ? window.Capacitor.registerPlugin("Health") : null;
+const HealthKit = HEALTHKIT_LISTO && window.Capacitor?.isNativePlatform?.() && window.Capacitor.isPluginAvailable?.("Health")
+  ? window.Capacitor.registerPlugin("Health") : null;
 
 let pushToken = null;      // el "número" de este teléfono para Apple/Google
 let pushUsuario = null;    // a qué cuenta está registrado ahora
