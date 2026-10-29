@@ -64,9 +64,15 @@ workflows:
       # van por Capgo (sin cambios nativos) no necesitan esto.
       - name: Compilar el .ipa
         script: |
+          # si falla, mostrar aquí mismo el motivo real (sin esto solo dice
+          # "Failed to archive" y había que bajar el log completo)
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" || {
+            echo "==================== MOTIVO DEL ERROR ===================="
+            grep -h -i -E "error:|provisioning profile|entitlement|signing certificate" /tmp/xcodebuild_logs/*.log | sort -u | tail -40
+            exit 1
+          }
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
