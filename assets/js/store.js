@@ -12,7 +12,7 @@
    panel (costos fijos para el punto de equilibrio).
    ========================================================= */
 
-import { sb } from "./supabase-client.js?v=54";
+import { sb } from "./supabase-client.js?v=55";
 
 const DB_KEY = "millan_academy_v3";
 
@@ -553,15 +553,17 @@ export const Store = {
     return C.datosSalud.filter((d) => d.alumnoId === alumnoId).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   },
   // guarda los agregados diarios (calorías, sueño, pasos) y los entrenamientos
-  // que llegan del reloj. Los diarios se pisan solos si ya existía ese
-  // (alumno, fecha, tipo) — por eso un re-sync del mismo día no duplica.
-  // Los entrenamientos se identifican por platformId (el id que les da
-  // HealthKit/Health Connect) para tampoco duplicarlos entre syncs.
+  // que llegan del reloj. Todo se identifica por (alumno, platform_id): en
+  // los diarios es "tipo|fecha" (se pisa el de ese día), en los
+  // entrenamientos el id que les da HealthKit/Health Connect — por eso un
+  // re-sync no duplica.
   async sincronizarSalud(alumnoId, diarios, entrenamientos) {
     if (diarios.length) {
       const { error } = await sb.from("datos_salud")
-        .upsert(diarios.map((d) => ({ alumno_id: alumnoId, tipo: d.tipo, fecha: d.fecha, valor: d.valor, fuente: "Apple Health" })),
-          { onConflict: "alumno_id,fecha,tipo" });
+        .upsert(diarios.map((d) => ({
+          alumno_id: alumnoId, tipo: d.tipo, fecha: d.fecha, valor: d.valor,
+          platform_id: `${d.tipo}|${d.fecha}`, fuente: "Apple Health",
+        })), { onConflict: "alumno_id,platform_id" });
       if (error) throw error;
     }
     if (entrenamientos.length) {

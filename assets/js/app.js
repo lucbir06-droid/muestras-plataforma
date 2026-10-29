@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=54";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=54";
-import { sb } from "./supabase-client.js?v=54";
+import { Store, toYMD } from "./store.js?v=55";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=55";
+import { sb } from "./supabase-client.js?v=55";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=54";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=54" en los imports de arriba son para que el navegador de
+   Los "?v=55" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=54" en el proyecto (app/index.html, store.js e
+   aparezca "?v=55" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -3486,6 +3486,12 @@ view.addEventListener("click", async (e) => {
       try {
         await sincronizarAppleSalud(saludBtn.dataset.alumno);
         toast("Apple Salud sincronizada");
+      } catch (err) {
+        // aquí sí se muestra el motivo real: el aviso genérico ("revisa tu
+        // conexión") no deja saber si falló el permiso, Salud o la base
+        window.maAnotar?.("salud", String(err?.message || err));
+        toast(`No se pudo sincronizar Salud: ${err?.message || err}`);
+        return;
       } finally {
         saludBtn.disabled = false;
       }

@@ -434,8 +434,9 @@ alter table public.evidencias add column if not exists user_id uuid default auth
 -- reloj (calorías, sueño, pasos y entrenamientos) — parte de Hábitos
 -- Premium, ver HealthKit en app.js. "calorias"/"sueno"/"pasos" son un
 -- agregado por día (se pisa solo si ya existía ese día); "entrenamiento" es
--- una fila por sesión real, identificada por platform_id (el id que les da
--- HealthKit/Health Connect) para no duplicar si se sincroniza dos veces.
+-- una fila por sesión real. Toda fila lleva platform_id: en los
+-- entrenamientos es el id que les da HealthKit/Health Connect, en los
+-- diarios "tipo|fecha". Así un re-sync no duplica nada.
 create table if not exists public.datos_salud (
   id uuid primary key default gen_random_uuid(),
   alumno_id uuid not null references public.alumnos(id) on delete cascade,
@@ -448,10 +449,13 @@ create table if not exists public.datos_salud (
   fuente text not null default 'Apple Health',
   creado_en timestamptz not null default now()
 );
-create unique index if not exists datos_salud_diario_key
-  on public.datos_salud (alumno_id, fecha, tipo) where tipo <> 'entrenamiento';
-create unique index if not exists datos_salud_entrenamiento_key
-  on public.datos_salud (alumno_id, platform_id) where platform_id is not null;
+-- Índice SIN condición (where): con uno parcial, el upsert de la app
+-- (on_conflict=alumno_id,platform_id) falla con "there is no unique or
+-- exclusion constraint matching the ON CONFLICT specification".
+drop index if exists public.datos_salud_diario_key;
+drop index if exists public.datos_salud_entrenamiento_key;
+create unique index if not exists datos_salud_platform_key
+  on public.datos_salud (alumno_id, platform_id);
 
 -- Chat: canales por categoría (1ra/2da/3ra/4ta división, abiertos a toda la
 -- academia) y mensajes directos alumno/papá <-> profe (sobre un alumno puntual).
