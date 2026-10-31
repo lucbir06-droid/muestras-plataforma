@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=56";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=56";
-import { sb } from "./supabase-client.js?v=56";
+import { Store, toYMD } from "./store.js?v=57";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=57";
+import { sb } from "./supabase-client.js?v=57";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=56";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=56" en los imports de arriba son para que el navegador de
+   Los "?v=57" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=56" en el proyecto (app/index.html, store.js e
+   aparezca "?v=57" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1433,6 +1433,7 @@ async function sincronizarAppleSalud(alumnoId) {
   const hoy = new Date();
   const desde = new Date(hoy.getTime() - 7 * 86400000);
   const diarios = [];
+  const fallos = [];
 
   for (const [hkTipo, tipo] of [["steps", "pasos"], ["calories", "calorias"]]) {
     try {
@@ -1440,7 +1441,7 @@ async function sincronizarAppleSalud(alumnoId) {
         dataType: hkTipo, startDate: desde.toISOString(), endDate: hoy.toISOString(), bucket: "day", aggregation: "sum",
       });
       for (const s of samples) if (s.value) diarios.push({ tipo, fecha: toYMD(new Date(s.startDate)), valor: Math.round(s.value) });
-    } catch (err) { console.warn(`No se pudo leer "${hkTipo}" de Salud:`, err); }
+    } catch (err) { console.warn(`No se pudo leer "${hkTipo}" de Salud:`, err); fallos.push(hkTipo); }
   }
 
   // el sueño no se puede agregar por día directo (ver docs del plugin) — se
@@ -1455,7 +1456,7 @@ async function sincronizarAppleSalud(alumnoId) {
       porDia.set(dia, (porDia.get(dia) || 0) + minutos);
     }
     for (const [fecha, minutos] of porDia) diarios.push({ tipo: "sueno", fecha, valor: Math.round(minutos) });
-  } catch (err) { console.warn("No se pudo leer el sueño de Salud:", err); }
+  } catch (err) { console.warn("No se pudo leer el sueño de Salud:", err); fallos.push("sleep"); }
 
   let entrenamientos = [];
   try {
@@ -1467,9 +1468,20 @@ async function sincronizarAppleSalud(alumnoId) {
       detalle: w.workoutType,
       platformId: w.platformId || `${w.startDate}|${w.workoutType}`,
     }));
-  } catch (err) { console.warn("No se pudieron leer los entrenamientos de Salud:", err); }
+  } catch (err) { console.warn("No se pudieron leer los entrenamientos de Salud:", err); fallos.push("workouts"); }
 
   await Store.sincronizarSalud(alumnoId, diarios, entrenamientos);
+  return { diarios: diarios.length, entrenamientos: entrenamientos.length, fallos };
+}
+
+// resultado de la última sincronización por alumno: se queda escrito en la
+// tarjeta porque el aviso (toast) desaparece en menos de 3 segundos. Si el
+// permiso está apagado, Apple no da error: solo entrega cero datos.
+const estadoSalud = {};
+function textoSalud({ diarios, entrenamientos, fallos }) {
+  if (fallos.length) return `No se pudo leer: ${fallos.join(", ")}. Llegaron ${diarios} datos diarios y ${entrenamientos} entrenamientos.`;
+  if (!diarios && !entrenamientos) return "Apple Salud no entregó datos. Revisa en el iPhone: Configuración → Salud → Acceso a datos y dispositivos → Millán Academy → Activar todo.";
+  return `Sincronizado: ${diarios} datos diarios y ${entrenamientos} entrenamientos.`;
 }
 
 // resumen de lo último que llegó de Apple Salud/Health Connect para un
@@ -1523,7 +1535,9 @@ function Evidencias() {
             <div class="row-sub">Trae calorías, sueño, pasos y entrenamientos de tu reloj.</div>
           </div>
           <button class="btn btn-ghost btn-sm" type="button" data-action="sincronizar-salud" data-alumno="${a.id}">Conectar / sincronizar</button>
-        </div>`).join("") : ""}
+          ${estadoSalud[a.id] ? `<div class="row-sub" style="flex-basis:100%;">${esc(estadoSalud[a.id])}</div>` : ""}
+        </div>
+        ${resumenSalud(Store.datosSaludDe(a.id))}`).join("") : ""}
       ${alumnosPremium.length ? `
       <form class="card" data-action="evidencia" style="max-width:460px;">
         <div class="field"><label>Alumno</label>
@@ -3489,14 +3503,15 @@ view.addEventListener("click", async (e) => {
       saludBtn.disabled = true;
       toast("Pidiendo permiso y trayendo datos de Salud…");
       try {
-        await sincronizarAppleSalud(saludBtn.dataset.alumno);
-        toast("Apple Salud sincronizada");
+        const r = await sincronizarAppleSalud(saludBtn.dataset.alumno);
+        estadoSalud[saludBtn.dataset.alumno] = textoSalud(r);
+        toast(estadoSalud[saludBtn.dataset.alumno]);
       } catch (err) {
         // aquí sí se muestra el motivo real: el aviso genérico ("revisa tu
         // conexión") no deja saber si falló el permiso, Salud o la base
         window.maAnotar?.("salud", String(err?.message || err));
-        toast(`No se pudo sincronizar Salud: ${err?.message || err}`);
-        return;
+        estadoSalud[saludBtn.dataset.alumno] = `No se pudo sincronizar: ${err?.message || err}`;
+        toast(estadoSalud[saludBtn.dataset.alumno]);
       } finally {
         saludBtn.disabled = false;
       }
