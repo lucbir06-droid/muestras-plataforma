@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=59";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=59";
-import { sb } from "./supabase-client.js?v=59";
+import { Store, toYMD } from "./store.js?v=60";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=60";
+import { sb, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-client.js?v=60";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=59";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=59" en los imports de arriba son para que el navegador de
+   Los "?v=60" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=59" en el proyecto (app/index.html, store.js e
+   aparezca "?v=60" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -1690,67 +1690,168 @@ async function handleEvidencia(form) {
 const COACH_IA_EN_APP = false;
 const SEGUNDOS_MAX_VIDEO = 60;
 const FOTOGRAMAS_POR_VIDEO = 8;
+const COACH_MAX_MENSAJES = 20;   // los últimos turnos que se mandan como contexto
+const COACH_MAX_GUARDADAS = 30;
+
+const COACH_SUGERENCIAS = [
+  { titulo: "Analizar mi video", texto: "Analiza la técnica en este video y dime qué corregir primero.", adjuntar: true },
+  { titulo: "Plan de una semana", texto: "Hazme un plan de entrenamiento de una semana para portero. Pregúntame primero lo que necesites saber." },
+  { titulo: "Mejorar una técnica", texto: "Quiero mejorar mis salidas en centros. ¿Por dónde empiezo?" },
+  { titulo: "Antes del partido", texto: "Dame una rutina de calentamiento de portero para antes de un partido." },
+];
 
 function coachIaDisponible() {
   if (window.Capacitor?.isNativePlatform?.() && !COACH_IA_EN_APP) return false;
   return esStaff() || Store.alumnos().some((a) => a.habitosPremium);
 }
 
-// la última respuesta: se guarda aquí para que no se pierda si la pantalla se redibuja
-let coachIaResultado = null;
+// Las conversaciones se guardan solo en este dispositivo (texto, sin imágenes):
+// la academia no las recibe. Los fotogramas viven en memoria mientras la
+// pantalla siga abierta, para poder hacer preguntas de seguimiento sobre el video.
+const coachIa = {
+  convs: null, duenoId: null, activaId: null, fotos: {},
+  borrador: "", archivo: null, permisoVideo: false,
+  enviando: false, estado: "", parcial: "", restantes: null, listaAbierta: false,
+};
+
+function coachClave(tipo) { return `ma_coach_${tipo}_${perfil?.id}`; }
+function coachLeer(tipo, porDefecto) {
+  try { return JSON.parse(localStorage.getItem(coachClave(tipo))) ?? porDefecto; } catch { return porDefecto; }
+}
+function coachEscribir(tipo, valor) {
+  try { localStorage.setItem(coachClave(tipo), JSON.stringify(valor)); } catch { /* sin espacio o bloqueado: sigue en memoria */ }
+}
+function coachConvs() {
+  if (coachIa.duenoId !== perfil?.id) {
+    Object.assign(coachIa, { convs: coachLeer("convs", []), duenoId: perfil?.id, activaId: null, fotos: {}, borrador: "", archivo: null, restantes: null });
+  }
+  return coachIa.convs;
+}
+function coachGuardar() {
+  coachIa.convs = coachIa.convs.filter((c) => c.mensajes.length)
+    .sort((a, b) => b.actualizada - a.actualizada).slice(0, COACH_MAX_GUARDADAS);
+  coachEscribir("convs", coachIa.convs);
+}
+function coachActiva() { return coachConvs().find((c) => c.id === coachIa.activaId) || null; }
+function coachNueva() {
+  coachIa.activaId = null;
+  coachIa.borrador = "";
+  coachIa.archivo = null;
+  coachIa.permisoVideo = false;
+  coachIa.listaAbierta = false;
+}
+
+function coachMensajeHtml(m, i) {
+  if (m.role === "user") {
+    return `<div class="coach-msg yo">
+      ${m.adjunto ? `<div class="coach-adjunto">${icon("i-play")} ${esc(m.adjunto)}</div>` : ""}
+      ${m.content ? `<div>${esc(m.content)}</div>` : ""}
+    </div>`;
+  }
+  return `<div class="coach-msg ia">
+    <div>${esc(m.content)}</div>
+    <button type="button" class="coach-copiar" data-coach="copiar" data-i="${i}">Copiar</button>
+  </div>`;
+}
 
 function CoachIA() {
   if (!coachIaDisponible()) return `<div class="empty">Coach IA no está disponible para esta cuenta.</div>`;
+  const convs = coachConvs();
+  const conv = coachActiva();
+  const mensajes = conv?.mensajes || [];
+  const permiso = coachLeer("permiso", false);
   return `
-    <div class="block">
-      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
-        Escribe una duda o sube un video de una jugada, y recibe tips de técnica. Complementa
-        a tu profe, no lo sustituye.
-      </p>
-      <form class="card" data-action="coach-ia" style="max-width:520px;">
-        <div class="field"><label>Video (opcional, máximo ${SEGUNDOS_MAX_VIDEO} segundos)</label>
-          <input name="video" type="file" accept="video/*" />
+    <div class="coach ${coachIa.listaAbierta ? "lista-abierta" : ""}">
+      <aside class="coach-lista">
+        <button type="button" class="btn btn-primary btn-sm" data-coach="nueva">${icon("i-plus")} Nueva conversación</button>
+        <div class="coach-convs">
+          ${convs.length ? convs.map((c) => `
+            <div class="coach-conv ${c.id === coachIa.activaId ? "on" : ""}">
+              <button type="button" class="coach-conv-abrir" data-coach="abrir" data-id="${c.id}">${esc(c.titulo)}</button>
+              <button type="button" class="coach-conv-borrar" data-coach="borrar" data-id="${c.id}" aria-label="Borrar conversación">${icon("i-x")}</button>
+            </div>`).join("") : `<p class="coach-nota">Tus conversaciones aparecerán aquí. Se guardan solo en este dispositivo.</p>`}
         </div>
-        <div class="field"><label>Tu pregunta (opcional si subes video)</label>
-          <textarea name="pregunta" maxlength="2000" placeholder="Ej. ¿Cómo mejoro mi caída lateral?"></textarea>
+      </aside>
+
+      <section class="coach-chat">
+        <div class="coach-barra">
+          <button type="button" class="btn btn-ghost btn-sm" data-coach="lista">${icon("i-list")} Conversaciones${convs.length ? ` (${convs.length})` : ""}</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-coach="nueva">${icon("i-plus")} Nueva</button>
         </div>
-        <label style="display:flex;gap:10px;align-items:flex-start;font-size:.8rem;font-weight:400;line-height:1.45;letter-spacing:0;text-transform:none;color:var(--muted);margin-bottom:14px;">
-          <input type="checkbox" name="permiso" required style="flex:none;width:18px;height:18px;min-height:0;padding:0;margin:2px 0 0;appearance:auto;-webkit-appearance:checkbox;" />
-          <span>Acepto que mi pregunta e imágenes del video se envíen a Anthropic, la empresa de la IA Claude, para generar la respuesta. Si sale un menor, soy su papá o mamá o tengo su permiso. La academia no las guarda. <a href="../privacidad/#coach-ia" target="_blank" rel="noopener" style="color:var(--accent-2)">Más información</a>.</span>
-        </label>
-        <button class="btn btn-primary btn-sm" type="submit">${icon("i-play")} Pedir tips</button>
-      </form>
-    </div>
-    ${coachIaResultado ? `
-    <div class="block" style="max-width:520px;">
-      <div class="block-head"><h3>Tips</h3></div>
-      <div class="card" style="white-space:pre-wrap;font-size:.9rem;line-height:1.5;">${esc(coachIaResultado.texto)}</div>
-      <p style="font-size:.76rem;color:var(--muted);margin-top:10px;">
-        La IA puede equivocarse: confírmalo con tu profe. Te quedan ${coachIaResultado.restantes} consultas hoy.
-      </p>
-    </div>` : ""}`;
+
+        <div class="coach-mensajes" id="coachMensajes">
+          ${mensajes.length || coachIa.enviando ? "" : `
+            <div class="coach-inicio">
+              <h3>¿Qué quieres mejorar hoy?</h3>
+              <p class="coach-nota">Pregunta lo que sea de técnica o entrenamiento, o sube un video de una jugada. Complementa a tu profe, no lo sustituye.</p>
+              <div class="coach-sugerencias">
+                ${COACH_SUGERENCIAS.map((s, i) => `<button type="button" data-coach="sugerencia" data-i="${i}"><b>${esc(s.titulo)}</b><span>${esc(s.texto)}</span></button>`).join("")}
+              </div>
+            </div>`}
+          ${mensajes.map(coachMensajeHtml).join("")}
+          ${coachIa.enviando ? `<div class="coach-msg ia"><div id="coachParcial">${esc(coachIa.parcial)}</div><div class="coach-pensando" id="coachEstado">${esc(coachIa.parcial ? "" : coachIa.estado)}</div></div>` : ""}
+          <div id="coachFin"></div>
+        </div>
+
+        ${permiso ? `
+        <form class="coach-escribir" data-action="coach-ia">
+          ${coachIa.archivo ? `
+            <div class="coach-archivo">
+              <span>${icon("i-play")} ${esc(coachIa.archivo.name)}</span>
+              <button type="button" data-coach="quitar-archivo" aria-label="Quitar archivo">${icon("i-x")}</button>
+            </div>
+            <label class="coach-permiso">
+              <input type="checkbox" name="permisoVideo" ${coachIa.permisoVideo ? "checked" : ""} required />
+              <span>Si sale un menor, soy su papá o mamá o tengo su permiso.</span>
+            </label>` : ""}
+          <div class="coach-fila">
+            <label class="coach-adjuntar" aria-label="Adjuntar video o foto">
+              ${icon("i-plus")}
+              <input type="file" name="video" id="coachArchivo" accept="video/*,image/*" hidden />
+            </label>
+            <textarea name="pregunta" id="coachTexto" rows="1" maxlength="2000" placeholder="${mensajes.length ? "Pregunta algo más…" : "Escribe tu pregunta…"}">${esc(coachIa.borrador)}</textarea>
+            <button class="btn btn-primary btn-sm" type="submit" ${coachIa.enviando ? "disabled" : ""}>Enviar</button>
+          </div>
+          <p class="coach-nota">La IA puede equivocarse: confírmalo con tu profe.${coachIa.restantes !== null ? ` Te quedan ${coachIa.restantes} consultas hoy.` : ""}</p>
+        </form>` : `
+        <div class="card coach-acepto">
+          <p>Coach IA envía tus preguntas, y las imágenes que elijas de un video o foto, a <b>Anthropic</b>, la empresa de la IA Claude, para generar la respuesta. La academia no las guarda. <a href="../privacidad/#coach-ia" target="_blank" rel="noopener">Más información</a>.</p>
+          <button type="button" class="btn btn-primary btn-sm" data-coach="aceptar">Acepto, empezar</button>
+        </div>`}
+      </section>
+    </div>`;
 }
 
-// Saca imágenes del video aquí mismo: el video completo nunca sale del teléfono.
+function coachAjustarTexto(el = document.getElementById("coachTexto")) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight + 2, 160)}px`;
+}
+
+function coachBajar() {
+  requestAnimationFrame(() => {
+    coachAjustarTexto();
+    document.getElementById("coachFin")?.scrollIntoView({ block: "end" });
+  });
+}
+
+// Saca imágenes del video aquí mismo: el video completo nunca sale del dispositivo.
 function fotogramasDeVideo(file) {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
     const url = URL.createObjectURL(file);
-    const fallar = (mensaje) => { URL.revokeObjectURL(url); reject(new Error(mensaje)); };
+    const fallar = (mensaje) => { clearTimeout(vigilante); URL.revokeObjectURL(url); reject(new Error(mensaje)); };
     const NO_SE_PUDO = "No pudimos leer ese video. Prueba con otro formato, como MP4.";
-    let vigilante = setTimeout(() => fallar(NO_SE_PUDO), 20000);
+    const vigilante = setTimeout(() => fallar(NO_SE_PUDO), 20000);
 
     video.muted = true;
     video.playsInline = true;
     video.preload = "auto";
-    video.onerror = () => { clearTimeout(vigilante); fallar(NO_SE_PUDO); };
+    video.onerror = () => fallar(NO_SE_PUDO);
     video.onloadeddata = async () => {
       const dur = video.duration;
-      if (!Number.isFinite(dur) || dur <= 0) { clearTimeout(vigilante); return fallar(NO_SE_PUDO); }
-      if (dur > SEGUNDOS_MAX_VIDEO) {
-        clearTimeout(vigilante);
-        return fallar(`El video dura ${Math.round(dur)} segundos. Recórtalo a ${SEGUNDOS_MAX_VIDEO} o menos, solo con la jugada.`);
-      }
+      if (!Number.isFinite(dur) || dur <= 0) return fallar(NO_SE_PUDO);
+      if (dur > SEGUNDOS_MAX_VIDEO) return fallar(`El video dura ${Math.round(dur)} segundos. Recórtalo a ${SEGUNDOS_MAX_VIDEO} o menos, solo con la jugada.`);
       const escala = Math.min(1, 768 / Math.max(video.videoWidth, video.videoHeight));
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(video.videoWidth * escala);
@@ -1764,7 +1865,6 @@ function fotogramasDeVideo(file) {
           salida.push(canvas.toDataURL("image/jpeg", 0.7).split(",")[1]);
         }
       } catch {
-        clearTimeout(vigilante);
         return fallar(NO_SE_PUDO);
       }
       clearTimeout(vigilante);
@@ -1776,27 +1876,181 @@ function fotogramasDeVideo(file) {
   });
 }
 
+async function coachImagenes(file) {
+  if (file.type.startsWith("image/")) {
+    try { return [await blobABase64(await resizeImage(file, 768, 0.7))]; }
+    catch { throw new Error("No pudimos leer esa foto. Prueba con otra, en JPG o PNG."); }
+  }
+  return fotogramasDeVideo(file);
+}
+
+// Los últimos turnos, empezando siempre con un mensaje del usuario. Las
+// imágenes solo viajan si su mensaje sigue dentro de esos turnos.
+function coachPeticion(conv, fotos) {
+  let desde = Math.max(conv.mensajes.length - COACH_MAX_MENSAJES, 0);
+  if (conv.mensajes[desde]?.role !== "user") desde++;
+  const mensajes = conv.mensajes.slice(desde).map((m) => ({ role: m.role, content: m.content }));
+  const videoEn = fotos && fotos.indice >= desde ? fotos.indice - desde : -1;
+  return { mensajes, videoEn, fotogramas: videoEn >= 0 ? fotos.fotogramas : [] };
+}
+
+// Va pintando la respuesta conforme llega. La función manda una línea JSON
+// por pedazo: {"t":"texto"}, y al final {"fin":true,"restantes":n} o {"error":"…"}.
+async function coachLeerRespuesta(res, alTexto) {
+  if (!res.ok || !res.body) {
+    const cuerpo = await res.json().catch(() => null);
+    throw new Error(cuerpo?.message || "El Coach IA no está disponible ahora. Intenta más tarde.");
+  }
+  const lector = res.body.getReader();
+  const decodificador = new TextDecoder();
+  let resto = "", fin = null;
+  for (;;) {
+    const { done, value } = await lector.read();
+    if (done) break;
+    resto += decodificador.decode(value, { stream: true });
+    const lineas = resto.split("\n");
+    resto = lineas.pop();
+    for (const linea of lineas) {
+      if (!linea.trim()) continue;
+      const dato = JSON.parse(linea);
+      if (dato.error) throw new Error(dato.error);
+      if (dato.t) alTexto(dato.t);
+      if (dato.fin) fin = dato;
+    }
+  }
+  if (!fin) throw new Error("Se cortó la conexión. Intenta de nuevo.");
+  return fin;
+}
+
 async function handleCoachIa(form) {
+  if (coachIa.enviando) return;
   const pregunta = form.elements.pregunta.value.trim();
-  const file = form.elements.video.files[0];
-  if (!pregunta && !file) return toast("Escribe una pregunta o elige un video.");
-  const boton = form.querySelector("button[type=submit]");
-  boton.disabled = true;
-  boton.textContent = file ? "Analizando el video…" : "Pensando…";
+  const file = coachIa.archivo;
+  if (!pregunta && !file) return toast("Escribe una pregunta o adjunta un video.");
+
+  coachConvs();
+  let conv = coachActiva();
+  const eraNueva = !conv;
+  if (!conv) {
+    conv = { id: String(Date.now()), titulo: "", mensajes: [], actualizada: Date.now() };
+    coachIa.convs.unshift(conv);
+    coachIa.activaId = conv.id;
+  }
+  coachIa.enviando = true;
+  coachIa.parcial = "";
+  coachIa.estado = file ? "Revisando el video…" : "Pensando…";
+  coachIa.borrador = "";
+  conv.mensajes.push({ role: "user", content: pregunta, ...(file ? { adjunto: file.name } : {}) });
+  render();
+  coachBajar();
+
+  const indice = conv.mensajes.length - 1;
   try {
-    const fotogramas = file ? await fotogramasDeVideo(file) : [];
-    const { data, error } = await sb.functions.invoke("coach-ia", { body: { pregunta, fotogramas } });
-    // cuando la función responde con error, el motivo viene en el cuerpo
-    const motivo = data?.message || (await error?.context?.json?.().catch(() => null))?.message;
-    if (error || !data?.success) throw new Error(motivo || "El Coach IA no está disponible ahora. Intenta más tarde.");
-    coachIaResultado = { texto: data.respuesta, restantes: data.restantes };
-    render();
+    let fotos = coachIa.fotos[conv.id];
+    if (file) fotos = { fotogramas: await coachImagenes(file), indice };
+    coachIa.estado = "Pensando…";
+    const estado = document.getElementById("coachEstado");
+    if (estado) estado.textContent = coachIa.estado;
+
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/coach-ia`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session?.access_token}`, apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(coachPeticion(conv, fotos)),
+    });
+    const fin = await coachLeerRespuesta(res, (texto) => {
+      coachIa.parcial += texto;
+      const parcial = document.getElementById("coachParcial");
+      if (parcial) parcial.textContent = coachIa.parcial;
+      const pensando = document.getElementById("coachEstado");
+      if (pensando) pensando.textContent = "";
+      coachBajar();
+    });
+
+    conv.mensajes.push({ role: "assistant", content: coachIa.parcial });
+    conv.actualizada = Date.now();
+    if (!conv.titulo) conv.titulo = (pregunta || `Video: ${file?.name || ""}`).slice(0, 50);
+    if (fotos) coachIa.fotos[conv.id] = fotos;
+    coachIa.restantes = fin.restantes ?? coachIa.restantes;
+    coachIa.archivo = null;
+    coachIa.permisoVideo = false;
+    coachGuardar();
   } catch (err) {
+    // no se manda a medias: la pregunta regresa a la caja para volver a intentar
+    conv.mensajes.pop();
+    coachIa.borrador = pregunta;
+    if (eraNueva) { coachIa.convs = coachIa.convs.filter((c) => c !== conv); coachIa.activaId = null; }
     toast(err?.message || "No se pudo completar. Intenta de nuevo.");
-    boton.disabled = false;
-    boton.innerHTML = `${icon("i-play")} Pedir tips`;
+  } finally {
+    coachIa.enviando = false;
+    coachIa.parcial = "";
+    render();
+    coachBajar();
   }
 }
+
+document.addEventListener("click", async (e) => {
+  const boton = e.target.closest("[data-coach]");
+  if (!boton) return;
+  const accion = boton.dataset.coach;
+  if (accion === "aceptar") coachEscribir("permiso", true);
+  if (accion === "nueva" && !coachIa.enviando) coachNueva();
+  if (accion === "lista") coachIa.listaAbierta = !coachIa.listaAbierta;
+  if (accion === "abrir" && !coachIa.enviando) {
+    coachIa.activaId = boton.dataset.id;
+    coachIa.listaAbierta = false;
+    coachIa.borrador = "";
+    coachIa.archivo = null;
+  }
+  if (accion === "borrar" && !coachIa.enviando) {
+    if (!confirm("¿Borrar esta conversación?")) return;
+    const id = boton.dataset.id;
+    coachIa.convs = coachIa.convs.filter((c) => c.id !== id);
+    delete coachIa.fotos[id];
+    if (coachIa.activaId === id) coachIa.activaId = null;
+    coachGuardar();
+  }
+  if (accion === "quitar-archivo") { coachIa.archivo = null; coachIa.permisoVideo = false; }
+  if (accion === "sugerencia") {
+    const s = COACH_SUGERENCIAS[boton.dataset.i];
+    coachIa.borrador = s.texto;
+    render();
+    coachAjustarTexto();
+    if (s.adjuntar) document.getElementById("coachArchivo")?.click();
+    else document.getElementById("coachTexto")?.focus();
+    return;
+  }
+  if (accion === "copiar") {
+    const m = coachActiva()?.mensajes[boton.dataset.i];
+    if (!m) return;
+    try { await navigator.clipboard.writeText(m.content); toast("Copiado"); }
+    catch { toast("No se pudo copiar"); }
+    return;
+  }
+  render();
+  if (accion === "abrir") coachBajar();
+});
+
+// lo que se está escribiendo sobrevive si la pantalla se redibuja
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "coachTexto") return;
+  coachIa.borrador = e.target.value;
+  coachAjustarTexto(e.target);
+});
+document.addEventListener("change", (e) => {
+  if (e.target.name === "permisoVideo") coachIa.permisoVideo = e.target.checked;
+  if (e.target.id === "coachArchivo" && e.target.files[0]) {
+    coachIa.archivo = e.target.files[0];
+    render();
+  }
+});
+// en computadora, Enter envía y Shift+Enter hace salto de línea
+document.addEventListener("keydown", (e) => {
+  if (e.target.id !== "coachTexto" || e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+  if (window.matchMedia("(max-width:900px)").matches) return;
+  e.preventDefault();
+  e.target.form?.requestSubmit();
+});
 
 /* ---------------- alumnos ---------------- */
 

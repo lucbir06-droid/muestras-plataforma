@@ -70,3 +70,5 @@ export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABL
   auth: { lock: candadoSesion },
   global: { fetch: fetchConReintento },
 });
+
+export { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY };
