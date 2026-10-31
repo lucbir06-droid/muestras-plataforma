@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=58";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=58";
-import { sb } from "./supabase-client.js?v=58";
+import { Store, toYMD } from "./store.js?v=59";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=59";
+import { sb } from "./supabase-client.js?v=59";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=58";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=58" en los imports de arriba son para que el navegador de
+   Los "?v=59" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=58" en el proyecto (app/index.html, store.js e
+   aparezca "?v=59" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -56,6 +56,7 @@ const NAV = [
   // solo los dueños confirman clases de prueba: a los profes no les sirve
   { path: "/clases-prueba", label: "Clases de prueba", icon: "i-play", roles: ["dueño", "alumno"], countKey: "solicitudesPendientes" },
   { path: "/inscribirse", label: "Inscripciones", labelAlumno: "Inscribirme", icon: "i-check", roles: ["dueño", "alumno"], countKey: "inscripcionesPendientes" },
+  { path: "/coach-ia", label: "Coach IA", icon: "i-play", roles: TODOS },
   { path: "/profes", label: "Objetivos de profes", icon: "i-target", roles: TODOS },
   { path: "/reportes", label: "Reportes", icon: "i-chart", roles: TODOS },
   { path: "/pagos", label: "Pagos", labelAlumno: "Mi suscripción", corto: "Pagos", icon: "i-card", roles: ["dueño", "alumno"], countKey: "pagosPendientes" },
@@ -83,6 +84,7 @@ function navVisible(item) {
   // En la app de iPhone, Hábitos Premium no se ofrece ni se menciona: la
   // sección solo existe para quien ya lo tiene activo (ver EN_APP_IPHONE).
   if (item.path === "/evidencias" && EN_APP_IPHONE && esAlumno() && !Store.alumnos().some((a) => a.habitosPremium)) return false;
+  if (item.path === "/coach-ia" && !coachIaDisponible()) return false;
   return true;
 }
 
@@ -334,6 +336,9 @@ function render() {
   } else if (path === "/inscribirse") {
     title = esAlumno() ? "Inscribirme" : "Inscripciones";
     html = Inscribirse(currentFullPath());
+  } else if (path === "/coach-ia") {
+    title = "Coach IA";
+    html = CoachIA();
   } else if (path === "/profes") {
     title = "Objetivos de profes";
     html = Profes();
@@ -1675,6 +1680,122 @@ async function handleEvidencia(form) {
     toast(errMsg(err));
   }
   render();
+}
+
+/* ---------------- coach IA ---------------- */
+
+// Apagado en la app nativa hasta la próxima versión que pase por revisión:
+// Apple no permite estrenar una función grande por actualización en vivo, y
+// antes hay que declarar el envío de datos a un tercero en App Privacy.
+const COACH_IA_EN_APP = false;
+const SEGUNDOS_MAX_VIDEO = 60;
+const FOTOGRAMAS_POR_VIDEO = 8;
+
+function coachIaDisponible() {
+  if (window.Capacitor?.isNativePlatform?.() && !COACH_IA_EN_APP) return false;
+  return esStaff() || Store.alumnos().some((a) => a.habitosPremium);
+}
+
+// la última respuesta: se guarda aquí para que no se pierda si la pantalla se redibuja
+let coachIaResultado = null;
+
+function CoachIA() {
+  if (!coachIaDisponible()) return `<div class="empty">Coach IA no está disponible para esta cuenta.</div>`;
+  return `
+    <div class="block">
+      <p style="font-size:.86rem;color:var(--muted);margin-bottom:16px;max-width:60ch;">
+        Escribe una duda o sube un video de una jugada, y recibe tips de técnica. Complementa
+        a tu profe, no lo sustituye.
+      </p>
+      <form class="card" data-action="coach-ia" style="max-width:520px;">
+        <div class="field"><label>Video (opcional, máximo ${SEGUNDOS_MAX_VIDEO} segundos)</label>
+          <input name="video" type="file" accept="video/*" />
+        </div>
+        <div class="field"><label>Tu pregunta (opcional si subes video)</label>
+          <textarea name="pregunta" maxlength="2000" placeholder="Ej. ¿Cómo mejoro mi caída lateral?"></textarea>
+        </div>
+        <label style="display:flex;gap:10px;align-items:flex-start;font-size:.8rem;font-weight:400;line-height:1.45;letter-spacing:0;text-transform:none;color:var(--muted);margin-bottom:14px;">
+          <input type="checkbox" name="permiso" required style="flex:none;width:18px;height:18px;min-height:0;padding:0;margin:2px 0 0;appearance:auto;-webkit-appearance:checkbox;" />
+          <span>Acepto que mi pregunta e imágenes del video se envíen a Anthropic, la empresa de la IA Claude, para generar la respuesta. Si sale un menor, soy su papá o mamá o tengo su permiso. La academia no las guarda. <a href="../privacidad/#coach-ia" target="_blank" rel="noopener" style="color:var(--accent-2)">Más información</a>.</span>
+        </label>
+        <button class="btn btn-primary btn-sm" type="submit">${icon("i-play")} Pedir tips</button>
+      </form>
+    </div>
+    ${coachIaResultado ? `
+    <div class="block" style="max-width:520px;">
+      <div class="block-head"><h3>Tips</h3></div>
+      <div class="card" style="white-space:pre-wrap;font-size:.9rem;line-height:1.5;">${esc(coachIaResultado.texto)}</div>
+      <p style="font-size:.76rem;color:var(--muted);margin-top:10px;">
+        La IA puede equivocarse: confírmalo con tu profe. Te quedan ${coachIaResultado.restantes} consultas hoy.
+      </p>
+    </div>` : ""}`;
+}
+
+// Saca imágenes del video aquí mismo: el video completo nunca sale del teléfono.
+function fotogramasDeVideo(file) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    const url = URL.createObjectURL(file);
+    const fallar = (mensaje) => { URL.revokeObjectURL(url); reject(new Error(mensaje)); };
+    const NO_SE_PUDO = "No pudimos leer ese video. Prueba con otro formato, como MP4.";
+    let vigilante = setTimeout(() => fallar(NO_SE_PUDO), 20000);
+
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.onerror = () => { clearTimeout(vigilante); fallar(NO_SE_PUDO); };
+    video.onloadeddata = async () => {
+      const dur = video.duration;
+      if (!Number.isFinite(dur) || dur <= 0) { clearTimeout(vigilante); return fallar(NO_SE_PUDO); }
+      if (dur > SEGUNDOS_MAX_VIDEO) {
+        clearTimeout(vigilante);
+        return fallar(`El video dura ${Math.round(dur)} segundos. Recórtalo a ${SEGUNDOS_MAX_VIDEO} o menos, solo con la jugada.`);
+      }
+      const escala = Math.min(1, 768 / Math.max(video.videoWidth, video.videoHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(video.videoWidth * escala);
+      canvas.height = Math.round(video.videoHeight * escala);
+      const ctx = canvas.getContext("2d");
+      const salida = [];
+      try {
+        for (let i = 0; i < FOTOGRAMAS_POR_VIDEO; i++) {
+          await new Promise((listo) => { video.onseeked = listo; video.currentTime = dur * (i + 0.5) / FOTOGRAMAS_POR_VIDEO; });
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          salida.push(canvas.toDataURL("image/jpeg", 0.7).split(",")[1]);
+        }
+      } catch {
+        clearTimeout(vigilante);
+        return fallar(NO_SE_PUDO);
+      }
+      clearTimeout(vigilante);
+      URL.revokeObjectURL(url);
+      resolve(salida);
+    };
+    video.src = url;
+    video.load();
+  });
+}
+
+async function handleCoachIa(form) {
+  const pregunta = form.elements.pregunta.value.trim();
+  const file = form.elements.video.files[0];
+  if (!pregunta && !file) return toast("Escribe una pregunta o elige un video.");
+  const boton = form.querySelector("button[type=submit]");
+  boton.disabled = true;
+  boton.textContent = file ? "Analizando el video…" : "Pensando…";
+  try {
+    const fotogramas = file ? await fotogramasDeVideo(file) : [];
+    const { data, error } = await sb.functions.invoke("coach-ia", { body: { pregunta, fotogramas } });
+    // cuando la función responde con error, el motivo viene en el cuerpo
+    const motivo = data?.message || (await error?.context?.json?.().catch(() => null))?.message;
+    if (error || !data?.success) throw new Error(motivo || "El Coach IA no está disponible ahora. Intenta más tarde.");
+    coachIaResultado = { texto: data.respuesta, restantes: data.restantes };
+    render();
+  } catch (err) {
+    toast(err?.message || "No se pudo completar. Intenta de nuevo.");
+    boton.disabled = false;
+    boton.innerHTML = `${icon("i-play")} Pedir tips`;
+  }
 }
 
 /* ---------------- alumnos ---------------- */
@@ -3135,6 +3256,7 @@ view.addEventListener("submit", async (e) => {
   if (action === "checkin") return void handleCheckin(form);
   if (action === "checkout") return void handleCheckout(form);
   if (action === "evidencia") return void handleEvidencia(form);
+  if (action === "coach-ia") return void handleCoachIa(form);
   const data = Object.fromEntries(new FormData(form).entries());
 
   try {

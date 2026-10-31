@@ -866,3 +866,24 @@ alter table public.alumnos add column if not exists fecha_pago_fijada_en timesta
 alter table public.pagos add column if not exists registrado_en timestamptz;
 update public.pagos set registrado_en = fecha where registrado_en is null;
 alter table public.pagos alter column registrado_en set default now();
+
+-- ----------------------------------------------------------------
+-- COACH IA — registro de consultas
+-- ----------------------------------------------------------------
+-- Solo para el límite diario y para saber cuánto se gasta: no guarda ni la
+-- pregunta ni las imágenes. La escribe la función coach-ia con la llave de
+-- servicio; desde el panel solo los dueños la pueden leer.
+create table if not exists public.ia_consultas (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  dia date not null,
+  fotogramas int not null default 0,
+  tokens_entrada int not null default 0,
+  tokens_salida int not null default 0,
+  creado_en timestamptz not null default now()
+);
+create index if not exists ia_consultas_user_dia on public.ia_consultas (user_id, dia);
+alter table public.ia_consultas enable row level security;
+drop policy if exists "ia_consultas dueno ve" on public.ia_consultas;
+create policy "ia_consultas dueno ve" on public.ia_consultas for select to authenticated
+  using (public.es_dueno());
