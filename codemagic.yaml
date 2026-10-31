@@ -52,9 +52,13 @@ workflows:
           # Developer (ej. HealthKit), el perfil viejo no la incluye y la
           # compilación falla con "Provisioning profile ... doesn't include
           # the HealthKit capability"; uno recién creado siempre la trae.
-          BUNDLE_RES_ID=$(app-store-connect bundle-ids list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --platform IOS --json \
+          # Sin --platform: si Apple tiene el identificador como UNIVERSAL, filtrar
+          # por IOS no lo encuentra y el borrado se salta sin avisar.
+          BUNDLE_RES_ID=$(app-store-connect bundle-ids list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
             | python3 -c 'import sys, json; d = json.load(sys.stdin); print(d[0]["id"] if d else "")')
-          if [ -n "$BUNDLE_RES_ID" ]; then
+          if [ -z "$BUNDLE_RES_ID" ]; then
+            echo "AVISO: no se encontró $BUNDLE_ID en Apple; no se borró ningún perfil"
+          else
             app-store-connect bundle-ids profiles --bundle-ids "$BUNDLE_RES_ID" --type IOS_APP_STORE --json \
               | python3 -c 'import sys, json; [print(p["id"]) for p in json.load(sys.stdin)]' \
               | while read -r PERFIL; do

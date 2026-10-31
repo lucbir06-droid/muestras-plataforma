@@ -1,6 +1,6 @@
-import { Store, toYMD } from "./store.js?v=57";
-import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=57";
-import { sb } from "./supabase-client.js?v=57";
+import { Store, toYMD } from "./store.js?v=58";
+import { PLANES, HABITOS_PREMIUM, fmtMXN, encontrarDuracion } from "./planes.js?v=58";
+import { sb } from "./supabase-client.js?v=58";
 
 /* =========================================================
    Millán Academy — app (panel interno)
@@ -14,12 +14,12 @@ import { sb } from "./supabase-client.js?v=57";
      alumno → lo suyo (o de sus hijos): evidencias, agenda, reportes,
               suscripción, clases de prueba
 
-   Los "?v=57" en los imports de arriba son para que el navegador de
+   Los "?v=58" en los imports de arriba son para que el navegador de
    quien visita el sitio baje siempre la versión nueva de estos
    archivos, no una guardada de antes. Cuando edites CUALQUIER .js
    (este archivo, store.js, planes.js o
    supabase-client.js), subí ese número acá y en cada lugar donde
-   aparezca "?v=57" en el proyecto (app/index.html, store.js e
+   aparezca "?v=58" en el proyecto (app/index.html, store.js e
    index.html también lo usan).
    ========================================================= */
 
@@ -2701,6 +2701,8 @@ function Duenos() {
       </div>
     </div>
 
+    ${SeccionProfes()}
+
     <div class="block">
       <div class="block-head"><h3>Cuentas y roles</h3></div>
       <p style="font-size:.8rem;color:var(--muted);margin-bottom:12px;max-width:62ch;">
@@ -2752,6 +2754,40 @@ function Duenos() {
       </div>
     </div>
   `;
+}
+
+// solo lectura: la cuenta de cada profe y los alumnos que tiene asignados.
+// El correo no sale aquí porque vive en Authentication, no en perfiles.
+function SeccionProfes() {
+  const profes = Store.perfiles().filter((p) => p.rol === "profe");
+  const alumnos = Store.alumnosActivos();
+  const sinProfe = alumnos.filter((a) => !a.coachId).length;
+  return `
+    <div class="block">
+      <div class="block-head"><h3>Profes</h3></div>
+      ${sinProfe ? `<p style="font-size:.8rem;color:var(--muted);margin-bottom:12px;">${sinProfe} ${sinProfe === 1 ? "alumno sin profe asignado" : "alumnos sin profe asignado"}: todos los profes los pueden ver.</p>` : ""}
+      <div class="list">
+        ${profes.length ? profes.map((p) => {
+          const suyos = alumnos.filter((a) => a.coachId === p.id);
+          return `
+          <div class="card">
+            <div style="display:flex;gap:12px;align-items:center;">
+              ${avatarPerfil(p)}
+              <div class="grow">
+                <div class="row-title">${esc(p.nombre)}</div>
+                <div class="row-sub">${esc(p.telefono || "Sin teléfono")}${p.pais ? ` · ${esc(p.pais)}` : ""}</div>
+              </div>
+            </div>
+            ${p.bio ? `<p class="perfil-bio">${esc(p.bio)}</p>` : ""}
+            <details style="margin-top:12px;">
+              <summary style="cursor:pointer;font-size:.86rem;">${suyos.length} ${suyos.length === 1 ? "alumno asignado" : "alumnos asignados"}</summary>
+              ${suyos.length ? `<div style="margin-top:8px;">${suyos.map((a) => `
+                <div class="row-sub" style="padding:6px 0;"><a class="rowlink" href="#/alumnos/${a.id}">${esc(a.nombre)}</a> · ${esc(a.categoria || "")}</div>`).join("")}</div>` : ""}
+            </details>
+          </div>`;
+        }).join("") : `<div class="empty">Todavía no hay cuentas de profe.</div>`}
+      </div>
+    </div>`;
 }
 
 /* ---------------- chat (vista previa) ---------------- */
