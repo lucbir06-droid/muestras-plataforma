@@ -735,6 +735,11 @@ button.link-crit:hover{color:var(--crit);}
 .coach-fila textarea{flex:1;min-width:0;min-height:42px;max-height:160px;resize:none;margin:0;font-size:16px;}
 .coach-adjuntar{flex:none;display:grid;place-items:center;width:42px;height:42px;margin:0;border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--ink-soft);cursor:pointer;}
 .coach-adjuntar svg{width:18px;height:18px;}
+button.coach-adjuntar{padding:0;background:none;font:inherit;}
+.coach-adjuntar-app{position:relative;flex:none;}
+.coach-menu-adjuntar{position:absolute;left:0;bottom:calc(100% + 8px);z-index:6;display:flex;flex-direction:column;min-width:200px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.25);}
+.coach-opcion{margin:0;padding:12px;border-radius:var(--radius-sm);color:var(--ink);font-size:.9rem;font-weight:400;letter-spacing:0;text-transform:none;cursor:pointer;}
+.coach-opcion:active{background:var(--surface-2);}
 .coach-archivo{display:flex;justify-content:space-between;align-items:center;gap:8px;}
 .coach-archivo button{flex:none;display:grid;place-items:center;width:28px;height:28px;background:none;border:0;color:var(--muted);cursor:pointer;}
 .coach-permiso{display:flex;gap:8px;align-items:flex-start;margin:0;font-size:.78rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);line-height:1.4;}

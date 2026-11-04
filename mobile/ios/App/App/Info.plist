@@ -5,9 +5,11 @@
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>NSCameraUsageDescription</key>
-	<string>La app usa la cámara para tomar la foto de llegada del profe (check-in) y las fotos de evidencia de los alumnos.</string>
+	<string>La app usa la cámara para tomar la foto de llegada del profe (check-in), las fotos de evidencia de los alumnos y la foto o el video que le mandas al Coach IA.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Al grabar un video para el Coach IA, la cámara también graba el sonido. El Coach IA solo usa imágenes del video; el audio no sale de tu teléfono.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>La app te deja elegir una foto de tu galería para el check-in o para subir una evidencia.</string>
+	<string>La app te deja elegir una foto de tu galería para el check-in o para subir una evidencia, y una foto o un video para el Coach IA.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Millán Academy lee tus calorías, sueño, pasos y entrenamientos de Salud para que tu profe pueda ver tu progreso físico junto con tus hábitos.</string>
 	<key>NSHealthUpdateUsageDescription</key>

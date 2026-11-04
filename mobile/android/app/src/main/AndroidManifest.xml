@@ -32,4 +32,16 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Desde Android 11 la app no "ve" la cámara si no lo declara: sin esto,
+         "Tomar foto" y "Grabar video" (Coach IA, check-in) caen a la galería.
+         No hace falta el permiso CAMERA: se usa la app de cámara del teléfono. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAPTURE" />
+        </intent>
+    </queries>
 </manifest>

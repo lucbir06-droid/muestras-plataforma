@@ -1684,10 +1684,17 @@ async function handleEvidencia(form) {
 
 /* ---------------- coach IA ---------------- */
 
-// Apagado en la app nativa hasta la próxima versión que pase por revisión:
-// Apple no permite estrenar una función grande por actualización en vivo, y
-// antes hay que declarar el envío de datos a un tercero en App Privacy.
-const COACH_IA_EN_APP = false;
+// En la app nativa solo aparece en los binarios que ya lo traen de fábrica
+// (los que pasan por revisión con la 1.3): Apple no permite estrenar una
+// función grande por actualización en vivo, hay que declarar en App Privacy
+// el envío de datos a un tercero, y grabar video desde la app necesita el
+// permiso de micrófono en el Info.plist. Esa versión es la primera que trae
+// el plugin Clipboard (lo usa "Copiar"), así que se reconoce por él: a las
+// apps anteriores, que reciben este código por Capgo, no les aparece.
+const ES_APP_NATIVA = !!window.Capacitor?.isNativePlatform?.();
+const Portapapeles = ES_APP_NATIVA && window.Capacitor.isPluginAvailable?.("Clipboard")
+  ? window.Capacitor.registerPlugin("Clipboard") : null;
+const COACH_IA_EN_APP = !!Portapapeles;
 const SEGUNDOS_MAX_VIDEO = 60;
 const FOTOGRAMAS_POR_VIDEO = 8;
 const COACH_MAX_MENSAJES = 20;   // los últimos turnos que se mandan como contexto
@@ -1701,7 +1708,7 @@ const COACH_SUGERENCIAS = [
 ];
 
 function coachIaDisponible() {
-  if (window.Capacitor?.isNativePlatform?.() && !COACH_IA_EN_APP) return false;
+  if (ES_APP_NATIVA && !COACH_IA_EN_APP) return false;
   return esStaff() || Store.alumnos().some((a) => a.habitosPremium);
 }
 
@@ -1711,7 +1718,7 @@ function coachIaDisponible() {
 const coachIa = {
   convs: null, duenoId: null, activaId: null, fotos: {},
   borrador: "", archivo: null, permisoVideo: false,
-  enviando: false, estado: "", parcial: "", restantes: null, listaAbierta: false,
+  enviando: false, estado: "", parcial: "", restantes: null, listaAbierta: false, menuAdjuntar: false,
 };
 
 function coachClave(tipo) { return `ma_coach_${tipo}_${perfil?.id}`; }
@@ -1739,6 +1746,28 @@ function coachNueva() {
   coachIa.archivo = null;
   coachIa.permisoVideo = false;
   coachIa.listaAbierta = false;
+  coachIa.menuAdjuntar = false;
+}
+
+// En la computadora basta un selector de archivos. En la app del teléfono,
+// el WebView de Android sin "capture" solo abre la galería (y con "capture"
+// solo la cámara), así que se ofrecen las tres opciones por separado.
+function coachAdjuntarHtml() {
+  if (!ES_APP_NATIVA) {
+    return `<label class="coach-adjuntar" aria-label="Adjuntar video o foto">
+      ${icon("i-plus")}
+      <input type="file" id="coachArchivo" data-coach-archivo accept="video/*,image/*" hidden />
+    </label>`;
+  }
+  const opcion = (id, texto, attrs) => `<label class="coach-opcion">${texto}<input type="file" id="${id}" data-coach-archivo ${attrs} hidden /></label>`;
+  return `<div class="coach-adjuntar-app">
+    <button type="button" class="coach-adjuntar" data-coach="menu-adjuntar" aria-label="Adjuntar video o foto" aria-expanded="${coachIa.menuAdjuntar}">${icon(coachIa.menuAdjuntar ? "i-x" : "i-plus")}</button>
+    ${coachIa.menuAdjuntar ? `<div class="coach-menu-adjuntar">
+      ${opcion("coachArchivo", "Elegir de la galería", 'accept="video/*,image/*"')}
+      ${opcion("coachGrabar", "Grabar video", 'accept="video/*" capture="environment"')}
+      ${opcion("coachFoto", "Tomar foto", 'accept="image/*" capture="environment"')}
+    </div>` : ""}
+  </div>`;
 }
 
 function coachMensajeHtml(m, i) {
@@ -1797,7 +1826,7 @@ function CoachIA() {
         <form class="coach-escribir" data-action="coach-ia">
           ${coachIa.archivo ? `
             <div class="coach-archivo">
-              <span>${icon("i-play")} ${esc(coachIa.archivo.name)}</span>
+              <span>${icon("i-play")} ${esc(coachNombreArchivo(coachIa.archivo))}</span>
               <button type="button" data-coach="quitar-archivo" aria-label="Quitar archivo">${icon("i-x")}</button>
             </div>
             <label class="coach-permiso">
@@ -1805,17 +1834,14 @@ function CoachIA() {
               <span>Si sale un menor, soy su papá o mamá o tengo su permiso.</span>
             </label>` : ""}
           <div class="coach-fila">
-            <label class="coach-adjuntar" aria-label="Adjuntar video o foto">
-              ${icon("i-plus")}
-              <input type="file" name="video" id="coachArchivo" accept="video/*,image/*" hidden />
-            </label>
+            ${coachAdjuntarHtml()}
             <textarea name="pregunta" id="coachTexto" rows="1" maxlength="2000" placeholder="${mensajes.length ? "Pregunta algo más…" : "Escribe tu pregunta…"}">${esc(coachIa.borrador)}</textarea>
             <button class="btn btn-primary btn-sm" type="submit" ${coachIa.enviando ? "disabled" : ""}>Enviar</button>
           </div>
           <p class="coach-nota">La IA puede equivocarse: confírmalo con tu profe.${coachIa.restantes !== null ? ` Te quedan ${coachIa.restantes} consultas hoy.` : ""}</p>
         </form>` : `
         <div class="card coach-acepto">
-          <p>Coach IA envía tus preguntas, y las imágenes que elijas de un video o foto, a <b>Anthropic</b>, la empresa de la IA Claude, para generar la respuesta. La academia no las guarda. <a href="../privacidad/#coach-ia" target="_blank" rel="noopener">Más información</a>.</p>
+          <p>Coach IA envía tus preguntas, y las imágenes que elijas de un video o foto, a <b>Anthropic</b>, la empresa de la IA Claude, para generar la respuesta. La academia no las guarda. <a href="https://millanacademy.com/privacidad/#coach-ia" target="_blank" rel="noopener">Más información</a>.</p>
           <button type="button" class="btn btn-primary btn-sm" data-coach="aceptar">Acepto, empezar</button>
         </div>`}
       </section>
@@ -1848,7 +1874,16 @@ function fotogramasDeVideo(file) {
     video.playsInline = true;
     video.preload = "auto";
     video.onerror = () => fallar(NO_SE_PUDO);
-    video.onloadeddata = async () => {
+    // Safari en iPhone (y el WebView de la app) a veces no carga ningún
+    // cuadro hasta que el video se reproduce: con loadedmetadata basta para
+    // empezar, y un play/pause en silencio lo destraba antes de buscar cuadros.
+    let empezado = false;
+    video.onloadedmetadata = video.onloadeddata = async () => {
+      if (empezado) return;
+      empezado = true;
+      if (video.readyState < 2) {
+        try { await video.play(); video.pause(); } catch { /* sin permiso para reproducir: se intenta igual */ }
+      }
       const dur = video.duration;
       if (!Number.isFinite(dur) || dur <= 0) return fallar(NO_SE_PUDO);
       if (dur > SEGUNDOS_MAX_VIDEO) return fallar(`El video dura ${Math.round(dur)} segundos. Recórtalo a ${SEGUNDOS_MAX_VIDEO} o menos, solo con la jugada.`);
@@ -1876,8 +1911,18 @@ function fotogramasDeVideo(file) {
   });
 }
 
+// En Android, lo que viene de algunas galerías o de la cámara llega sin tipo:
+// se adivina por la extensión.
+function coachEsImagen(file) {
+  if (file.type) return file.type.startsWith("image/");
+  return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name || "");
+}
+function coachNombreArchivo(file) {
+  return file.name || (coachEsImagen(file) ? "Foto" : "Video");
+}
+
 async function coachImagenes(file) {
-  if (file.type.startsWith("image/")) {
+  if (coachEsImagen(file)) {
     try { return [await blobABase64(await resizeImage(file, 768, 0.7))]; }
     catch { throw new Error("No pudimos leer esa foto. Prueba con otra, en JPG o PNG."); }
   }
@@ -1938,9 +1983,10 @@ async function handleCoachIa(form) {
   }
   coachIa.enviando = true;
   coachIa.parcial = "";
-  coachIa.estado = file ? "Revisando el video…" : "Pensando…";
+  coachIa.estado = file ? (coachEsImagen(file) ? "Revisando la foto…" : "Revisando el video…") : "Pensando…";
   coachIa.borrador = "";
-  conv.mensajes.push({ role: "user", content: pregunta, ...(file ? { adjunto: file.name } : {}) });
+  coachIa.menuAdjuntar = false;
+  conv.mensajes.push({ role: "user", content: pregunta, ...(file ? { adjunto: coachNombreArchivo(file) } : {}) });
   render();
   coachBajar();
 
@@ -1969,7 +2015,7 @@ async function handleCoachIa(form) {
 
     conv.mensajes.push({ role: "assistant", content: coachIa.parcial });
     conv.actualizada = Date.now();
-    if (!conv.titulo) conv.titulo = (pregunta || `Video: ${file?.name || ""}`).slice(0, 50);
+    if (!conv.titulo) conv.titulo = (pregunta || `${file && coachEsImagen(file) ? "Foto" : "Video"}: ${file ? coachNombreArchivo(file) : ""}`).slice(0, 50);
     if (fotos) coachIa.fotos[conv.id] = fotos;
     coachIa.restantes = fin.restantes ?? coachIa.restantes;
     coachIa.archivo = null;
@@ -1989,6 +2035,27 @@ async function handleCoachIa(form) {
   }
 }
 
+// En la app, el portapapeles del navegador no siempre está permitido dentro
+// del WebView: se usa el plugin nativo, y si no, el método viejo.
+async function coachCopiar(texto) {
+  try {
+    if (Portapapeles) await Portapapeles.write({ string: texto });
+    else await navigator.clipboard.writeText(texto);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = texto;
+    area.setAttribute("readonly", "");
+    area.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { /* sin soporte */ }
+    area.remove();
+    return ok;
+  }
+}
+
 document.addEventListener("click", async (e) => {
   const boton = e.target.closest("[data-coach]");
   if (!boton) return;
@@ -1996,6 +2063,7 @@ document.addEventListener("click", async (e) => {
   if (accion === "aceptar") coachEscribir("permiso", true);
   if (accion === "nueva" && !coachIa.enviando) coachNueva();
   if (accion === "lista") coachIa.listaAbierta = !coachIa.listaAbierta;
+  if (accion === "menu-adjuntar") coachIa.menuAdjuntar = !coachIa.menuAdjuntar;
   if (accion === "abrir" && !coachIa.enviando) {
     coachIa.activaId = boton.dataset.id;
     coachIa.listaAbierta = false;
@@ -2016,15 +2084,15 @@ document.addEventListener("click", async (e) => {
     coachIa.borrador = s.texto;
     render();
     coachAjustarTexto();
-    if (s.adjuntar) document.getElementById("coachArchivo")?.click();
+    if (s.adjuntar && ES_APP_NATIVA) { coachIa.menuAdjuntar = true; render(); }
+    else if (s.adjuntar) document.getElementById("coachArchivo")?.click();
     else document.getElementById("coachTexto")?.focus();
     return;
   }
   if (accion === "copiar") {
     const m = coachActiva()?.mensajes[boton.dataset.i];
     if (!m) return;
-    try { await navigator.clipboard.writeText(m.content); toast("Copiado"); }
-    catch { toast("No se pudo copiar"); }
+    toast(await coachCopiar(m.content) ? "Copiado" : "No se pudo copiar");
     return;
   }
   render();
@@ -2039,8 +2107,9 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", (e) => {
   if (e.target.name === "permisoVideo") coachIa.permisoVideo = e.target.checked;
-  if (e.target.id === "coachArchivo" && e.target.files[0]) {
+  if (e.target.matches("[data-coach-archivo]") && e.target.files[0]) {
     coachIa.archivo = e.target.files[0];
+    coachIa.menuAdjuntar = false;
     render();
   }
 });
